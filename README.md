@@ -188,3 +188,38 @@ Controller performance is evaluated using:
 ## License
 
 This project is intended for educational, research, and portfolio purposes to demonstrate the design and evaluation of modern spacecraft attitude control systems.
+
+# Verification & Validation
+
+The framework follows a modular verification approach with comprehensive unit testing for each subsystem.
+
+## Verification Status
+
+| Module | Status | Description |
+|--------|:------:|-------------|
+| Spacecraft Dynamics | ✅ | Rigid-body rotational dynamics, quaternion kinematics, state propagation |
+| Orbit Model | ✅ | Circular orbit propagation in ECI frame |
+| Earth's Magnetic Field | ✅ | Dipole magnetic field model |
+| Gravity Gradient Disturbance | ✅ | Gravity gradient torque computation |
+| Atmospheric Drag | ✅ | Aerodynamic disturbance torque model |
+| Solar Radiation Pressure | ✅ | SRP disturbance torque model |
+| Disturbance Manager | ✅ | Disturbance aggregation and management |
+
+## Test Summary
+
+- **101 automated unit tests**
+- **101 tests passed**
+- **0 failures**
+- Validation of nominal, boundary, and error conditions
+- Numerical stability verification
+- Physics consistency checks
+- Input validation and exception handling
+
+```
+================== test session starts ==================
+collected 101 items
+
+================== 101 passed in 0.36 s ==================
+```
+
+The project is developed using **pytest** with a strong emphasis on verification and maintainability. Every implemented subsystem is accompanied by dedicated unit tests to ensure correctness and support future development.
