@@ -19,6 +19,10 @@ total_torque : Net external torque applied to the spacecraft [N·m]
 Outputs
 -------
 Updated spacecraft attitude and angular velocity.
+
+Integration
+-----------
+Forward Euler
 """
 
 import numpy as np
@@ -28,120 +32,163 @@ class Spacecraft:
     """
     3-DOF rigid-body spacecraft attitude dynamics.
 
-    Notes
-    -----
-    Assumptions:
+    Assumptions
+    -----------
     - Rigid spacecraft
     - Constant inertia matrix
     - Quaternion attitude representation
-    - Translational dynamics are neglected
-    - All external torques are supplied by the simulator
+    - Translational dynamics neglected
+    - External torques supplied by the simulator
     """
 
     def __init__(
         self,
         inertia: np.ndarray,
         mass: float,
-        q0: np.ndarray = None,
-        omega0: np.ndarray = None,
-    ):
-        """
-        Initialize spacecraft model.
+        q0: np.ndarray | None = None,
+        omega0: np.ndarray | None = None,
+    ) -> None:
 
-        Parameters
-        ----------
-        inertia : ndarray (3x3)
-            Spacecraft inertia matrix [kg·m²]
+        # --------------------------------------------------
+        # Mass
+        # --------------------------------------------------
 
-        mass : float
-            Spacecraft mass [kg]
+        if mass <= 0:
+            raise ValueError("Mass must be positive.")
 
-        q0 : ndarray (4,), optional
-            Initial quaternion (scalar-first)
+        self.mass = float(mass)
 
-        omega0 : ndarray (3,), optional
-            Initial angular velocity [rad/s]
-        """
-
-        self.mass = mass
+        # --------------------------------------------------
+        # Inertia
+        # --------------------------------------------------
 
         self.J = np.asarray(inertia, dtype=float)
 
         if self.J.shape != (3, 3):
-            raise ValueError("Inertia matrix must be 3x3.")
+            raise ValueError("Inertia matrix must have shape (3,3).")
 
         self.J_inv = np.linalg.inv(self.J)
 
-        self.q = (
-            np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
-            if q0 is None
-            else np.asarray(q0, dtype=float)
-        )
+        # --------------------------------------------------
+        # Quaternion
+        # --------------------------------------------------
 
-        self.q /= np.linalg.norm(self.q)
+        if q0 is None:
 
-        self.omega = (
-            np.zeros(3, dtype=float)
-            if omega0 is None
-            else np.asarray(omega0, dtype=float)
-        )
+            self.q = np.array(
+                [1.0, 0.0, 0.0, 0.0],
+                dtype=float,
+            )
 
-    # ==========================================================
+        else:
+
+            q0 = np.asarray(q0, dtype=float)
+
+            if q0.shape != (4,):
+                raise ValueError(
+                    "Quaternion must have shape (4,)."
+                )
+
+            norm = np.linalg.norm(q0)
+
+            if norm < 1e-12:
+                raise ValueError(
+                    "Quaternion norm cannot be zero."
+                )
+
+            self.q = q0 / norm
+
+        # --------------------------------------------------
+        # Angular Velocity
+        # --------------------------------------------------
+
+        if omega0 is None:
+
+            self.omega = np.zeros(
+                3,
+                dtype=float,
+            )
+
+        else:
+
+            omega0 = np.asarray(
+                omega0,
+                dtype=float,
+            )
+
+            if omega0.shape != (3,):
+                raise ValueError(
+                    "Angular velocity must have shape (3,)."
+                )
+
+            self.omega = omega0
+
+    # ======================================================
+    # Properties
+    # ======================================================
+
+    @property
+    def inertia(self) -> np.ndarray:
+        """
+        Return spacecraft inertia matrix.
+        """
+
+        return self.J
+
+    # ======================================================
     # Quaternion Kinematics
-    # ==========================================================
+    # ======================================================
 
     def quaternion_derivative(self) -> np.ndarray:
         """
         Compute quaternion derivative.
-
-        Returns
-        -------
-        ndarray (4,)
-            Quaternion derivative.
         """
 
         wx, wy, wz = self.omega
 
         Omega = np.array([
             [0.0, -wx, -wy, -wz],
-            [wx,   0.0,  wz, -wy],
-            [wy,  -wz,  0.0,  wx],
-            [wz,   wy, -wx,  0.0]
+            [wx,  0.0,  wz, -wy],
+            [wy, -wz,  0.0,  wx],
+            [wz,  wy, -wx,  0.0],
         ])
 
         return 0.5 * Omega @ self.q
 
-    # ==========================================================
+    # ======================================================
     # Rotational Dynamics
-    # ==========================================================
+    # ======================================================
 
-    def angular_acceleration(self, total_torque: np.ndarray) -> np.ndarray:
+    def angular_acceleration(
+        self,
+        total_torque: np.ndarray,
+    ) -> np.ndarray:
         """
-        Compute spacecraft angular acceleration.
-
-        Parameters
-        ----------
-        total_torque : ndarray (3,)
-            Total applied external torque [N·m]
-
-        Returns
-        -------
-        ndarray (3,)
-            Angular acceleration [rad/s²]
+        Compute angular acceleration.
         """
 
-        total_torque = np.asarray(total_torque, dtype=float)
+        total_torque = np.asarray(
+            total_torque,
+            dtype=float,
+        )
+
+        if total_torque.shape != (3,):
+            raise ValueError(
+                "Torque must have shape (3,)."
+            )
 
         gyroscopic = np.cross(
             self.omega,
-            self.J @ self.omega
+            self.J @ self.omega,
         )
 
-        return self.J_inv @ (total_torque - gyroscopic)
+        return self.J_inv @ (
+            total_torque - gyroscopic
+        )
 
-    # ==========================================================
-    # State Propagation
-    # ==========================================================
+    # ======================================================
+    # Propagation
+    # ======================================================
 
     def propagate(
         self,
@@ -149,46 +196,49 @@ class Spacecraft:
         dt: float,
     ) -> None:
         """
-        Propagate spacecraft dynamics using Forward Euler integration.
-
-        Parameters
-        ----------
-        total_torque : ndarray (3,)
-            Net applied torque [N·m]
-
-        dt : float
-            Simulation time step [s]
+        Propagate spacecraft dynamics using
+        Forward Euler integration.
         """
 
-        if dt <= 0.0:
-            raise ValueError("Time step must be positive.")
+        if dt <= 0:
+            raise ValueError(
+                "Time step must be positive."
+            )
 
-        # Angular dynamics
-        omega_dot = self.angular_acceleration(total_torque)
+        omega_dot = self.angular_acceleration(
+            total_torque
+        )
+
         self.omega += omega_dot * dt
 
-        # Quaternion kinematics
         q_dot = self.quaternion_derivative()
+
         self.q += q_dot * dt
 
-        # Normalize quaternion
-        self.q /= np.linalg.norm(self.q)
+        norm = np.linalg.norm(self.q)
 
-    # ==========================================================
-    # Utility Functions
-    # ==========================================================
+        if norm < 1e-12:
+            raise RuntimeError(
+                "Quaternion norm collapsed."
+            )
 
-    def get_state(self):
+        self.q /= norm
+
+    # ======================================================
+    # Utilities
+    # ======================================================
+
+    def get_state(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Return current spacecraft state.
-
-        Returns
-        -------
-        tuple
-            (quaternion, angular_velocity)
+        Return spacecraft state.
         """
 
-        return self.q.copy(), self.omega.copy()
+        return (
+            self.q.copy(),
+            self.omega.copy(),
+        )
 
     def set_state(
         self,
@@ -197,29 +247,49 @@ class Spacecraft:
     ) -> None:
         """
         Set spacecraft state.
-
-        Parameters
-        ----------
-        q : ndarray (4,)
-            Quaternion.
-
-        omega : ndarray (3,)
-            Angular velocity [rad/s]
         """
 
-        self.q = np.asarray(q, dtype=float)
-        self.q /= np.linalg.norm(self.q)
+        q = np.asarray(
+            q,
+            dtype=float,
+        )
 
-        self.omega = np.asarray(omega, dtype=float)
+        omega = np.asarray(
+            omega,
+            dtype=float,
+        )
+
+        if q.shape != (4,):
+            raise ValueError(
+                "Quaternion must have shape (4,)."
+            )
+
+        if omega.shape != (3,):
+            raise ValueError(
+                "Angular velocity must have shape (3,)."
+            )
+
+        norm = np.linalg.norm(q)
+
+        if norm < 1e-12:
+            raise ValueError(
+                "Quaternion norm cannot be zero."
+            )
+
+        self.q = q / norm
+        self.omega = omega
 
     def reset(self) -> None:
         """
-        Reset spacecraft to default initial conditions.
+        Reset spacecraft state.
         """
 
         self.q = np.array(
             [1.0, 0.0, 0.0, 0.0],
-            dtype=float
+            dtype=float,
         )
 
-        self.omega = np.zeros(3, dtype=float)
+        self.omega = np.zeros(
+            3,
+            dtype=float,
+        )

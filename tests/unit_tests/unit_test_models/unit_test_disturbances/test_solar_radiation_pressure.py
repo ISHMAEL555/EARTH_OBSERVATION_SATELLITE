@@ -286,3 +286,5 @@ def test_invalid_dcm(srp):
         srp.compute(
             np.eye(2),
         )
+
+        
