@@ -1,28 +1,51 @@
-# ADCS Hybrid RW + VSCMG Controller Design
+# Hybrid ADCS for an Agile Earth Observation Satellite
 
-## Overview
+Design and implementation of a **Hybrid Attitude Control System (ACS)** for an agile Low Earth Orbit (LEO) Earth Observation satellite using **Reaction Wheels (RW)**, **Variable-Speed Control Moment Gyroscopes (VSCMG)**, and **Magnetorquers**.
 
-This project implements a complete closed-loop ADCS for a small EO spacecraft equipped with:
-- A **pyramidal reaction wheel (RW)** cluster (4 wheels, 45° skew)
-- A **variable-speed, variable-axis Control Moment Gyro (VSCMG)** cluster
-- **3-axis magnetorquers** for momentum management
+The project focuses on the **control subsystem** of the spacecraft. The spacecraft attitude is assumed to be known, allowing the study to concentrate on controller design, torque allocation, momentum management, actuator behavior, and closed-loop performance.
 
-The system is designed to:
-- Fill the combined momentum envelope during agile maneuvers
-- Maintain tight pointing performance during nominal and dumping operations
-- Bound stored momentum indefinitely using magnetic desaturation
-- Handle singularities in the VSCMG cluster
+---
+
+## Problem Statement
+
+Develop a hybrid attitude control system capable of maintaining high pointing accuracy for an Earth Observation satellite while performing agile attitude maneuvers. The controller must coordinate multiple actuator types, manage actuator saturation, perform momentum dumping, and maintain stable operation under realistic disturbance torques and actuator failure scenarios.
+
+---
+
+## Objectives
+
+- Maintain high-precision nadir pointing.
+- Perform agile attitude slew maneuvers.
+- Coordinate torque generation between Reaction Wheels and VSCMGs.
+- Manage reaction wheel momentum using magnetorquers.
+- Handle reaction wheel saturation.
+- Evaluate controller performance during actuator failures.
+- Compare different attitude control strategies.
+
+---
+
+## Features
+
+- 3-DOF spacecraft rotational dynamics
+- Quaternion-based attitude representation
+- Pyramidal Reaction Wheel configuration
+- Variable-Speed Control Moment Gyroscope (VSCMG) model
+- Magnetorquer-based momentum dumping
+- Environmental disturbance torques
+- Modular attitude controller architecture
+- Torque allocation algorithms
+- Automatic visualization and performance metrics
 
 ---
 
 ## Project Structure
 
-```bash
+```text
 adcs_hybrid_rw_vscmg/
 ├── README.md
 ├── requirements.txt
-├── main.py                          # Single entry point
-├── config.py                        # All parameters & gains
+├── main.py
+├── config.py
 │
 ├── models/
 │   ├── spacecraft.py
@@ -58,7 +81,110 @@ adcs_hybrid_rw_vscmg/
 │   ├── visualization.py
 │   └── metrics.py
 │
-├── data/results/                    # Simulation outputs (gitignored)
-├── plots/                           # Auto-generated figures
+├── data/results/
+├── plots/
 └── report/
-    └── ADCS_Controller_Report.md    # Final report (source)
+```
+
+---
+
+## Simulation Scenarios
+
+The project evaluates controller performance under several representative mission scenarios.
+
+- Nadir Pointing
+- Agile Slew Maneuver
+- Reaction Wheel Saturation
+- Momentum Dumping
+- Reaction Wheel Failure
+- VSCMG Singularity
+- External Disturbance Rejection
+
+---
+
+## Controllers
+
+The software architecture allows multiple control algorithms to be implemented and compared.
+
+- PD Controller
+- LQR Controller
+- H∞ Controller *(planned)*
+- Model Predictive Control *(planned)*
+
+---
+
+## Actuator Models
+
+### Reaction Wheels
+
+- Pyramidal 4-wheel configuration
+- Torque limits
+- Momentum limits
+- Saturation
+
+### Variable-Speed Control Moment Gyroscopes
+
+- Gimbal dynamics
+- Steering law
+- Singularity analysis
+
+### Magnetorquers
+
+- Magnetic dipole generation
+- Momentum dumping
+- Wheel desaturation
+
+---
+
+## Disturbance Models
+
+The spacecraft is subjected to representative environmental disturbances.
+
+- Gravity Gradient Torque
+- Residual Magnetic Torque
+- Constant External Disturbance Torque
+- Atmospheric Drag *(optional)*
+- Solar Radiation Pressure *(optional)*
+
+---
+
+## Performance Metrics
+
+Controller performance is evaluated using:
+
+- Pointing Error
+- RMS Attitude Error
+- Maximum Attitude Error
+- Settling Time
+- Overshoot
+- Control Torque
+- Wheel Momentum
+- Momentum Dumping Efficiency
+- Actuator Utilization
+
+---
+
+## Future Improvements
+
+- Multiplicative Extended Kalman Filter (MEKF)
+- Unscented Kalman Filter (UKF)
+- Star Tracker and IMU models
+- Flexible spacecraft dynamics
+- Fault Detection, Isolation and Recovery (FDIR)
+- Monte Carlo analysis
+- Hardware-in-the-Loop (HIL) testing
+
+---
+
+## References
+
+1. Markley, F. L., & Crassidis, J. L. *Fundamentals of Spacecraft Attitude Determination and Control*
+2. Wie, B. *Space Vehicle Dynamics and Control*
+3. Wertz, J. R. *Spacecraft Attitude Determination and Control*
+4. ECSS-E-ST-60-30C – Space Engineering: Attitude and Orbit Control Systems
+
+---
+
+## License
+
+This project is intended for educational, research, and portfolio purposes to demonstrate the design and evaluation of modern spacecraft attitude control systems.
