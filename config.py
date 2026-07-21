@@ -1,72 +1,162 @@
 """
-ADCS Hybrid RW + VSCMG Configuration
-Single Source of Truth - Strictly following assignment document
+config.py
+
+Global configuration file for the Earth Observation Satellite ADCS Simulation.
+
+This file serves as the single source of truth for all spacecraft,
+orbit, actuator, controller, environment, and simulation parameters.
 """
 
 import numpy as np
 
-# ========================= SPACECRAFT INERTIA =========================
+# ==========================================================
+# Spacecraft Inertia Properties
+# ==========================================================
+
 J = np.array([
     [9.833,    -0.06692,  -0.05295],
     [-0.06692, 14.11,     -0.002176],
-    [-0.05295, -0.002176, 16.01]
-])  # kg·m² (exact from document)
+    [-0.05295, -0.002176, 16.01],
+])  # kg·m²
 
-# ========================= ORBIT PARAMETERS =========================
-ALTITUDE_KM = 600.0
-MU = 3.986004418e14          # m³/s²
-R_EARTH = 6378137.0          # m
-a = R_EARTH + ALTITUDE_KM * 1000.0
-n = np.sqrt(MU / a**3)
+# ==========================================================
+# Orbital Parameters
+# ==========================================================
 
-ORBIT_PERIOD = 2 * np.pi / n
-print(f"Orbit period: {ORBIT_PERIOD/60:.2f} minutes")
+ALTITUDE_KM = 600.0                     # km
 
-# ========================= ACTUATORS (Exact from Document) =========================
-# Reaction Wheels - Pyramidal cluster
-H_RW_MAX = 1.4          # Nms per wheel
-TAU_RW_MAX = 0.475      # Nm per wheel (475 mNm)
+MU = 3.986004418e14                     # m³/s²
+R_EARTH = 6378137.0                     # m
 
-# VSCMG - Effective capability in body frame
-VSCMG_TAU_MAX = np.array([0.031, 0.031, 0.041])   # Nm   [x, y, z]
-VSCMG_H_MAX   = np.array([0.049, 0.049, 0.098])   # Nms  [x, y, z]
+a = R_EARTH + ALTITUDE_KM * 1000.0      # Semi-major axis [m]
+n = np.sqrt(MU / a**3)                  # Mean motion [rad/s]
 
-# Magnetorquers
-M_MAX = 18.28           # Am² per axis
+ORBIT_PERIOD = 2.0 * np.pi / n          # seconds
 
-# ========================= SINGULARITY AVOIDANCE =========================
-D_THRESHOLD = 0.2           # Singular measure threshold (tunable)
-SR_DAMPING = 0.02           # Singularity Robust damping factor λ
-NULL_MOTION_GAIN = 0.5      # Null motion gain
-SINGULARITY_MEASURE = "cond"  # "det" or "cond"
+# ==========================================================
+# Environment Models
+# ==========================================================
 
-# ========================= CONTROLLER GAINS (Starting values - will tune) =========================
-KP = np.diag([12.0, 15.0, 18.0])
-KD = np.diag([40.0, 48.0, 55.0])
-KI = np.diag([0.5, 0.5, 0.5])
-
-# Magnetic Dumping
-K_DUMP = 1.5e4
-H_DUMP_THRESHOLD = 0.7 * 1.4 * 4   # ~70% of total RW capacity as trigger
-
-# ========================= SIMULATION =========================
-DT = 0.05                    # seconds
-SIM_TIME_SLEW = 400.0
-SIM_TIME_NADIR = 5 * ORBIT_PERIOD + 100.0   # 5 full orbits + margin
-
-# Robustness
-INERTIA_UNCERTAINTY = 0.10   # ±10%
-MISALIGNMENT_DEG = 5.0       # ±5°
-
-# Reproducibility
-SEED = 42
-np.random.seed(SEED)
-
-# Environment
 USE_IGRF = True
 INCLUDE_AERO = True
 INCLUDE_SRP = True
 
-# Output control
+# ----------------------------------------------------------
+# Earth's Magnetic Dipole Model
+# ----------------------------------------------------------
+# Centered dipole approximation.
+# Dipole aligned with +Z axis in ECI.
+# Units: A·m²
+
+EARTH_MAGNETIC_DIPOLE_MOMENT = np.array([
+    0.0,
+    0.0,
+    7.94e22,
+])
+
+# ==========================================================
+# Reaction Wheels
+# ==========================================================
+
+H_RW_MAX = 1.4                  # N·m·s
+TAU_RW_MAX = 0.475              # N·m
+
+# ==========================================================
+# Variable Speed CMGs
+# ==========================================================
+
+VSCMG_TAU_MAX = np.array([
+    0.031,
+    0.031,
+    0.041,
+])  # N·m
+
+VSCMG_H_MAX = np.array([
+    0.049,
+    0.049,
+    0.098,
+])  # N·m·s
+
+# ==========================================================
+# Magnetorquers
+# ==========================================================
+
+M_MAX = 18.28                   # A·m²
+
+# ==========================================================
+# Singularity Avoidance
+# ==========================================================
+
+D_THRESHOLD = 0.20
+
+SR_DAMPING = 0.02
+
+NULL_MOTION_GAIN = 0.5
+
+SINGULARITY_MEASURE = "cond"
+
+# ==========================================================
+# Controller Gains
+# ==========================================================
+
+KP = np.diag([
+    12.0,
+    15.0,
+    18.0,
+])
+
+KD = np.diag([
+    40.0,
+    48.0,
+    55.0,
+])
+
+KI = np.diag([
+    0.5,
+    0.5,
+    0.5,
+])
+
+# ==========================================================
+# Momentum Dumping
+# ==========================================================
+
+K_DUMP = 1.5e4
+
+H_DUMP_THRESHOLD = 0.7 * H_RW_MAX * 4
+
+# ==========================================================
+# Simulation
+# ==========================================================
+
+DT = 0.05                        # seconds
+
+SIM_TIME_SLEW = 400.0            # seconds
+
+SIM_TIME_NADIR = (
+    5.0 * ORBIT_PERIOD + 100.0
+)
+
+# ==========================================================
+# Robustness Analysis
+# ==========================================================
+
+INERTIA_UNCERTAINTY = 0.10        # ±10%
+
+MISALIGNMENT_DEG = 5.0            # degrees
+
+# ==========================================================
+# Random Seed
+# ==========================================================
+
+SEED = 42
+
+np.random.seed(SEED)
+
+# ==========================================================
+# Output
+# ==========================================================
+
 SAVE_PLOTS = True
+
 SHOW_PLOTS = False
