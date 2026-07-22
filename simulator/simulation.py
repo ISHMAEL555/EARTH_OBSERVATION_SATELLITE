@@ -16,7 +16,7 @@ from typing import Any
 from models.environment.orbit import Orbit
 from models.environment.magnetic_field import MagneticField
 
-from models.spacecraft.spacecraft import Spacecraft
+from models.spacecraft import Spacecraft
 
 from models.disturbances.disturbances import Disturbances
 

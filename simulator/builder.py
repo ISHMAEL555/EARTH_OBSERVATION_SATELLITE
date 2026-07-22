@@ -14,7 +14,7 @@ from simulator.simulation import Simulation
 from models.environment.orbit import Orbit
 from models.environment.magnetic_field import MagneticField
 
-from models.spacecraft.spacecraft import Spacecraft
+from models.spacecraft import Spacecraft
 
 from models.disturbances.disturbances import Disturbances
 from models.disturbances.gravity_gradient import GravityGradient
@@ -26,7 +26,7 @@ from models.disturbances.solar_radiation_pressure import (
 from models.actuators.rw_pyramid import RWPyramid
 from models.actuators.magnetorquers import Magnetorquers
 
-from controllers.pd import QuaternionPD
+from controllers.quaternion_pd import QuaternionPD
 from controllers.lqr import LQR
 
 
