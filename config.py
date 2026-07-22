@@ -1,162 +1,238 @@
 """
 config.py
 
-Global configuration file for the Earth Observation Satellite ADCS Simulation.
+Global configuration file for the Earth Observation Satellite
+Attitude Determination and Control System (ADCS) Simulation.
 
-This file serves as the single source of truth for all spacecraft,
-orbit, actuator, controller, environment, and simulation parameters.
+This module serves as the single source of truth for all mission,
+spacecraft, environment, actuator, controller, and simulation
+parameters used throughout the project.
+
+Notes
+-----
+- This file stores only configuration parameters.
+- No subsystem physics should be implemented here.
+- Derived quantities should be computed inside their respective models.
 """
 
 import numpy as np
 
 # ==========================================================
-# Spacecraft Inertia Properties
+# Mission
 # ==========================================================
 
-J = np.array([
-    [9.833,    -0.06692,  -0.05295],
-    [-0.06692, 14.11,     -0.002176],
-    [-0.05295, -0.002176, 16.01],
-])  # kg·m²
+MISSION = {
+
+    "name": "Advanced Earth Observation Satellite",
+
+    "mission_duration": 5.0,      # years
+
+}
 
 # ==========================================================
-# Orbital Parameters
+# Spacecraft
 # ==========================================================
 
-ALTITUDE_KM = 600.0                     # km
+SPACECRAFT = {
 
-MU = 3.986004418e14                     # m³/s²
-R_EARTH = 6378137.0                     # m
+    "mass": None,                 # kg
 
-a = R_EARTH + ALTITUDE_KM * 1000.0      # Semi-major axis [m]
-n = np.sqrt(MU / a**3)                  # Mean motion [rad/s]
+    "inertia": np.array([
+        [9.833,    -0.06692,  -0.05295],
+        [-0.06692, 14.11,     -0.002176],
+        [-0.05295, -0.002176, 16.01],
+    ]),
 
-ORBIT_PERIOD = 2.0 * np.pi / n          # seconds
-
-# ==========================================================
-# Environment Models
-# ==========================================================
-
-USE_IGRF = True
-INCLUDE_AERO = True
-INCLUDE_SRP = True
-
-# ----------------------------------------------------------
-# Earth's Magnetic Dipole Model
-# ----------------------------------------------------------
-# Centered dipole approximation.
-# Dipole aligned with +Z axis in ECI.
-# Units: A·m²
-
-EARTH_MAGNETIC_DIPOLE_MOMENT = np.array([
-    0.0,
-    0.0,
-    7.94e22,
-])
+}
 
 # ==========================================================
-# Reaction Wheels
+# Orbit
 # ==========================================================
 
-H_RW_MAX = 1.4                  # N·m·s
-TAU_RW_MAX = 0.475              # N·m
+ORBIT = {
+
+    # Classical Orbital Elements
+
+    "altitude": 600e3,                    # m
+
+    "inclination": np.deg2rad(98.0),      # rad
+
+    "eccentricity": 0.0,
+
+    "raan": 0.0,                          # rad
+
+    "argument_of_perigee": 0.0,           # rad
+
+    "true_anomaly": 0.0,                  # rad
+
+    # Earth Constants
+
+    "earth_radius": 6378137.0,            # m
+
+    "gravitational_parameter": 3.986004418e14,
+
+}
 
 # ==========================================================
-# Variable Speed CMGs
+# Environment
 # ==========================================================
 
-VSCMG_TAU_MAX = np.array([
-    0.031,
-    0.031,
-    0.041,
-])  # N·m
+ENVIRONMENT = {
 
-VSCMG_H_MAX = np.array([
-    0.049,
-    0.049,
-    0.098,
-])  # N·m·s
+    "use_igrf": True,
 
-# ==========================================================
-# Magnetorquers
-# ==========================================================
+    "include_aerodynamics": True,
 
-M_MAX = 18.28                   # A·m²
+    "include_solar_radiation_pressure": True,
+
+    "earth_magnetic_dipole": np.array([
+        0.0,
+        0.0,
+        7.94e22,
+    ]),
+
+}
 
 # ==========================================================
-# Singularity Avoidance
+# Reaction Wheel Geometry
 # ==========================================================
 
-D_THRESHOLD = 0.20
+RW_SKEW_ANGLE = np.deg2rad(45.0)
 
-SR_DAMPING = 0.02
-
-NULL_MOTION_GAIN = 0.5
-
-SINGULARITY_MEASURE = "cond"
+c = np.cos(RW_SKEW_ANGLE)
+s = np.sin(RW_SKEW_ANGLE)
 
 # ==========================================================
-# Controller Gains
+# Actuators
 # ==========================================================
 
-KP = np.diag([
-    12.0,
-    15.0,
-    18.0,
-])
+ACTUATORS = {
 
-KD = np.diag([
-    40.0,
-    48.0,
-    55.0,
-])
+    # ------------------------------------------------------
+    # Four-Wheel Pyramidal Reaction Wheel Assembly
+    # ------------------------------------------------------
 
-KI = np.diag([
-    0.5,
-    0.5,
-    0.5,
-])
+    "reaction_wheels": {
+
+        "configuration": "pyramid",
+
+        "num_wheels": 4,
+
+        "skew_angle": RW_SKEW_ANGLE,
+
+        "wheel_axes": np.array([
+            [ c,  0.0,  s],
+            [0.0,  c,  s],
+            [-c, 0.0,  s],
+            [0.0, -c,  s]
+        ]).T,
+
+        "max_torque": 0.475,      # N·m per wheel
+
+        "max_momentum": 1.40,     # N·m·s per wheel
+
+    },
+
+    # ------------------------------------------------------
+    # Three-Axis Magnetorquer Assembly
+    # ------------------------------------------------------
+
+    "magnetorquers": {
+
+        "num_rods": 3,
+
+        "axes": np.eye(3),
+
+        "max_dipole": 18.28,      # A·m²
+
+    },
+
+}
 
 # ==========================================================
-# Momentum Dumping
+# Controllers
 # ==========================================================
 
-K_DUMP = 1.5e4
+CONTROLLERS = {
 
-H_DUMP_THRESHOLD = 0.7 * H_RW_MAX * 4
+    "pd": {
+
+        "Kp": np.diag([
+            12.0,
+            15.0,
+            18.0,
+        ]),
+
+        "Kd": np.diag([
+            40.0,
+            48.0,
+            55.0,
+        ]),
+
+        "Ki": np.diag([
+            0.5,
+            0.5,
+            0.5,
+        ]),
+
+    },
+
+    "momentum_dumping": {
+
+        "gain": 1.5e4,
+
+        "threshold": 0.7,
+
+    },
+
+}
 
 # ==========================================================
 # Simulation
 # ==========================================================
 
-DT = 0.05                        # seconds
+SIMULATION = {
 
-SIM_TIME_SLEW = 400.0            # seconds
+    "time_step": 0.05,
 
-SIM_TIME_NADIR = (
-    5.0 * ORBIT_PERIOD + 100.0
-)
+    "slew_duration": 400.0,
+
+    "nadir_orbits": 5,
+
+    "nadir_settling_time": 100.0,
+
+}
 
 # ==========================================================
 # Robustness Analysis
 # ==========================================================
 
-INERTIA_UNCERTAINTY = 0.10        # ±10%
+ROBUSTNESS = {
 
-MISALIGNMENT_DEG = 5.0            # degrees
+    "inertia_uncertainty": 0.10,
 
-# ==========================================================
-# Random Seed
-# ==========================================================
+    "misalignment_deg": 5.0,
 
-SEED = 42
-
-np.random.seed(SEED)
+}
 
 # ==========================================================
 # Output
 # ==========================================================
 
-SAVE_PLOTS = True
+OUTPUT = {
 
-SHOW_PLOTS = False
+    "save_plots": True,
+
+    "show_plots": False,
+
+}
+
+# ==========================================================
+# Randomization
+# ==========================================================
+
+RANDOM = {
+
+    "seed": 42,
+
+}

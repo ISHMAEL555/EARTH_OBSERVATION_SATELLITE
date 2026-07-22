@@ -1,82 +1,183 @@
 """
 models/actuators/rw_pyramid.py
 
-Pyramidal Reaction Wheel Cluster (4 wheels, 45° skew)
-Strictly follows assignment: momentum capacity 1.4 Nms, peak torque 0.475 Nm per wheel.
+Four-Wheel Pyramidal Reaction Wheel Assembly
 """
 
 import numpy as np
 
+from config import ACTUATORS
+
 
 class RWPyramid:
     """
-    4-wheel pyramidal reaction wheel cluster.
-    Skew angle = 45° (aligned to pitch-yaw plane).
+    Four-wheel pyramidal reaction wheel assembly.
     """
 
-    def __init__(self, h_max: float = 1.4, tau_max: float = 0.475):
-        self.h_max = h_max          # Nms per wheel
-        self.tau_max = tau_max      # Nm per wheel
+    def __init__(self):
 
-        # Wheel spin axes in body frame (unit vectors)
-        # Pyramid configuration, 45° skew
-        s = np.sin(np.deg2rad(45.0))
-        c = np.cos(np.deg2rad(45.0))
+        cfg = ACTUATORS["reaction_wheels"]
 
-        # Wheel directions (standard pyramid mounting)
-        self.wheel_axes = np.array([
-            [ c,  0,  s],   # Wheel 1
-            [ 0,  c,  s],   # Wheel 2
-            [-c,  0,  s],   # Wheel 3
-            [ 0, -c,  s]    # Wheel 4
-        ]).T  # Shape: (3, 4)
+        self.num_wheels = cfg["num_wheels"]
+        self.wheel_axes = cfg["wheel_axes"]
 
-        # Allocation matrix: torque_body = A @ tau_wheels
-        self.A = self.wheel_axes.copy()           # (3 x 4)
-        self.A_pinv = np.linalg.pinv(self.A)      # Moore-Penrose pseudo-inverse (4 x 3)
+        self.max_torque = cfg["max_torque"]
+        self.max_momentum = cfg["max_momentum"]
 
-        # State
-        self.omega_rw = np.zeros(4)               # Wheel speeds (rad/s) - not needed if using momentum directly
-        self.h_rw = np.zeros(4)                   # Angular momentum of each wheel [Nms]
+        # Allocation matrix
+        self.allocation_matrix = self.wheel_axes
+        self.allocation_matrix_pinv = np.linalg.pinv(self.allocation_matrix)
 
-    def allocate_torque(self, tau_cmd: np.ndarray) -> np.ndarray:
+        # -------------------------------------------------
+        # States
+        # -------------------------------------------------
+
+        self.commanded_body_torque = np.zeros(3)
+
+        self.commanded_wheel_torque = np.zeros(self.num_wheels)
+
+        self.actual_wheel_torque = np.zeros(self.num_wheels)
+
+        self.wheel_momentum = np.zeros(self.num_wheels)
+
+        self.body_torque = np.zeros(3)
+
+    # =====================================================
+    # Public Interface
+    # =====================================================
+
+    def update(
+        self,
+        commanded_body_torque: np.ndarray,
+        dt: float,
+    ):
         """
-        Allocate commanded body torque to individual wheel torques.
+        Advance the reaction wheel assembly by one simulation step.
 
         Parameters
         ----------
-        tau_cmd : np.ndarray (3,)   Desired body torque [Nm]
+        commanded_body_torque : ndarray (3,)
+            Desired spacecraft body torque [Nm]
+
+        dt : float
+            Simulation time step [s]
+        """
+
+        commanded_body_torque = self._validate_vector(
+            commanded_body_torque,
+            "commanded_body_torque",
+            3,
+        )
+
+        self.commanded_body_torque = commanded_body_torque.copy()
+
+        # -------------------------------------------------
+        # Torque Allocation
+        # -------------------------------------------------
+
+        self.commanded_wheel_torque = (
+            self.allocation_matrix_pinv
+            @ self.commanded_body_torque
+        )
+
+        # -------------------------------------------------
+        # Torque Saturation
+        # -------------------------------------------------
+
+        self.actual_wheel_torque = np.clip(
+            self.commanded_wheel_torque,
+            -self.max_torque,
+            self.max_torque,
+        )
+
+        # -------------------------------------------------
+        # Wheel Momentum Integration
+        # -------------------------------------------------
+
+        self.wheel_momentum += self.actual_wheel_torque * dt
+
+        self.wheel_momentum = np.clip(
+            self.wheel_momentum,
+            -self.max_momentum,
+            self.max_momentum,
+        )
+
+        # -------------------------------------------------
+        # Actual Body Torque
+        # -------------------------------------------------
+
+        self.body_torque = (
+            self.allocation_matrix
+            @ self.actual_wheel_torque
+        )
+
+    # =====================================================
+    # Utility Functions
+    # =====================================================
+
+    def get_total_momentum(self) -> np.ndarray:
+        """
+        Total spacecraft angular momentum stored in the wheel cluster.
 
         Returns
         -------
-        tau_wheels : np.ndarray (4,)   Torque command for each wheel [Nm]
+        ndarray (3,)
+            Total body-frame momentum [N·m·s]
         """
-        tau_wheels = self.A_pinv @ tau_cmd
 
-        # Saturate wheel torques
-        tau_wheels = np.clip(tau_wheels, -self.tau_max, self.tau_max)
+        return self.wheel_axes @ self.wheel_momentum
 
-        return tau_wheels
-
-    def update_momentum(self, tau_wheels: np.ndarray, dt: float):
+    def get_total_momentum_capacity(self) -> float:
         """
-        Integrate wheel momentum.
-        h_dot = tau_wheels
+        Total scalar momentum capacity.
+
+        Returns
+        -------
+        float
+            Total momentum capacity [N·m·s]
         """
-        self.h_rw += tau_wheels * dt
 
-        # Saturate momentum
-        self.h_rw = np.clip(self.h_rw, -self.h_max, self.h_max)
-
-    def get_total_momentum(self) -> np.ndarray:
-        """Return total RW momentum in body frame [Nms]"""
-        return self.wheel_axes @ self.h_rw
-
-    def get_momentum_capacity(self) -> float:
-        """Approximate total scalar momentum capacity"""
-        return 4 * self.h_max
+        return self.num_wheels * self.max_momentum
 
     def reset(self):
-        """Reset wheels to zero momentum"""
-        self.h_rw = np.zeros(4)
-        self.omega_rw = np.zeros(4)
+        """
+        Reset reaction wheel states.
+        """
+
+        self.commanded_body_torque.fill(0.0)
+
+        self.commanded_wheel_torque.fill(0.0)
+
+        self.actual_wheel_torque.fill(0.0)
+
+        self.wheel_momentum.fill(0.0)
+
+        self.body_torque.fill(0.0)
+
+    # =====================================================
+    # Private Functions
+    # =====================================================
+
+    @staticmethod
+    def _validate_vector(
+        vector: np.ndarray,
+        name: str,
+        size: int,
+    ) -> np.ndarray:
+        """
+        Validate vector inputs.
+        """
+
+        vector = np.asarray(vector, dtype=float)
+
+        if vector.shape != (size,):
+            raise ValueError(
+                f"{name} must be a ({size},) vector."
+            )
+
+        if not np.all(np.isfinite(vector)):
+            raise ValueError(
+                f"{name} contains invalid values."
+            )
+
+        return vector
