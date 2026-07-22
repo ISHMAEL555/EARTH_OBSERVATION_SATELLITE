@@ -7,11 +7,27 @@ import pytest
 
 from models.environment.orbit import Orbit
 
-from tests.test_config.orbit import TEST_TIMES
 from tests.test_config.tolerances import (
-    ATOL_DOT_PRODUCT,
     RTOL_DEFAULT,
+    ATOL_DOT_PRODUCT,
 )
+
+
+# ==========================================================
+# Test Constants
+# ==========================================================
+
+MU = 3.986004418e14                     # [m^3/s^2]
+EARTH_RADIUS = 6378137.0                # [m]
+ALTITUDE = 600e3                        # [m]
+
+SEMI_MAJOR_AXIS = EARTH_RADIUS + ALTITUDE
+
+ECCENTRICITY = 0.0
+INCLINATION = np.deg2rad(98.0)
+RAAN = 0.0
+ARGUMENT_OF_PERIGEE = 0.0
+TRUE_ANOMALY = 0.0
 
 
 # ==========================================================
@@ -20,100 +36,107 @@ from tests.test_config.tolerances import (
 
 @pytest.fixture
 def orbit():
-    """Create a default Orbit instance."""
-    return Orbit()
+    """Create a nominal circular orbit."""
+
+    return Orbit(
+        mu=MU,
+        semi_major_axis=SEMI_MAJOR_AXIS,
+        eccentricity=ECCENTRICITY,
+        inclination=INCLINATION,
+        raan=RAAN,
+        argument_of_perigee=ARGUMENT_OF_PERIGEE,
+        true_anomaly=TRUE_ANOMALY,
+    )
 
 
 # ==========================================================
 # Initialization
 # ==========================================================
 
-def test_default_initialization(orbit):
-    """Verify default orbit initialization."""
+def test_constructor(orbit):
+    """Verify constructor stores orbital parameters."""
 
-    assert orbit.time == 0.0
-    assert orbit.eccentricity == 0.0
-
-    assert orbit.position.shape == (3,)
-    assert orbit.velocity.shape == (3,)
-
-    assert orbit.radius == pytest.approx(
-        orbit.semi_major_axis,
-        rel=RTOL_DEFAULT,
-    )
+    assert orbit.mu == MU
+    assert orbit.semi_major_axis == SEMI_MAJOR_AXIS
+    assert orbit.eccentricity == ECCENTRICITY
+    assert orbit.inclination == INCLINATION
+    assert orbit.raan == RAAN
+    assert orbit.argument_of_perigee == ARGUMENT_OF_PERIGEE
+    assert orbit.initial_true_anomaly == TRUE_ANOMALY
 
 
-def test_initial_position(orbit):
-    """Verify the initial position vector."""
+def test_invalid_gravitational_parameter():
 
-    expected = np.array(
-        [
-            orbit.semi_major_axis,
-            0.0,
-            0.0,
-        ]
-    )
+    with pytest.raises(ValueError):
 
-    assert np.allclose(orbit.position, expected)
+        Orbit(
+            mu=-1.0,
+            semi_major_axis=SEMI_MAJOR_AXIS,
+        )
 
 
-def test_initial_velocity(orbit):
-    """Verify the initial velocity vector."""
+def test_invalid_semi_major_axis():
 
-    expected = np.array(
-        [
-            0.0,
-            orbit.semi_major_axis * orbit.mean_motion,
-            0.0,
-        ]
-    )
+    with pytest.raises(ValueError):
 
-    assert np.allclose(orbit.velocity, expected)
+        Orbit(
+            mu=MU,
+            semi_major_axis=-100.0,
+        )
+
+
+def test_invalid_eccentricity():
+
+    with pytest.raises(ValueError):
+
+        Orbit(
+            mu=MU,
+            semi_major_axis=SEMI_MAJOR_AXIS,
+            eccentricity=1.2,
+        )
 
 
 # ==========================================================
-# Orbit Propagation
+# Propagation
 # ==========================================================
 
-def test_update_changes_time(orbit):
-    """Verify simulation time updates correctly."""
+def test_returns_numpy_arrays(orbit):
 
-    orbit.update(100.0)
+    position, velocity = orbit.propagate(0.0)
 
-    assert orbit.time == 100.0
+    assert isinstance(position, np.ndarray)
+    assert isinstance(velocity, np.ndarray)
 
 
-def test_radius_remains_constant(orbit):
-    """Verify circular orbit radius remains constant."""
+def test_returns_correct_shapes(orbit):
 
-    for t in TEST_TIMES:
+    position, velocity = orbit.propagate(100.0)
 
-        orbit.update(t)
+    assert position.shape == (3,)
+    assert velocity.shape == (3,)
 
-        assert orbit.radius == pytest.approx(
-            orbit.semi_major_axis,
+
+def test_radius_constant(orbit):
+    """Circular orbit radius must remain constant."""
+
+    for time in np.linspace(0.0, orbit.period, 20):
+
+        position, _ = orbit.propagate(time)
+
+        radius = np.linalg.norm(position)
+
+        assert radius == pytest.approx(
+            SEMI_MAJOR_AXIS,
             rel=RTOL_DEFAULT,
         )
 
 
-def test_position_velocity_shapes(orbit):
-    """Verify state vector dimensions."""
+def test_velocity_perpendicular_to_position(orbit):
+    """Position and velocity must remain orthogonal."""
 
-    orbit.update(500.0)
+    position, velocity = orbit.propagate(1000.0)
 
-    assert orbit.position.shape == (3,)
-    assert orbit.velocity.shape == (3,)
-
-
-def test_velocity_is_perpendicular_to_position(orbit):
-    """Verify position and velocity remain orthogonal."""
-
-    orbit.update(750.0)
-
-    dot = np.dot(
-        orbit.position,
-        orbit.velocity,
-    )
+    dot = np.dot(position, velocity)
 
     assert dot == pytest.approx(
         0.0,
@@ -122,55 +145,101 @@ def test_velocity_is_perpendicular_to_position(orbit):
 
 
 def test_orbital_speed_constant(orbit):
-    """Verify orbital speed remains constant."""
+    """Orbital speed must remain constant."""
 
-    speed_initial = np.linalg.norm(orbit.velocity)
+    _, velocity0 = orbit.propagate(0.0)
 
-    orbit.update(1000.0)
+    _, velocity1 = orbit.propagate(2500.0)
 
-    speed_final = np.linalg.norm(orbit.velocity)
-
-    assert speed_initial == pytest.approx(
-        speed_final,
+    assert np.linalg.norm(
+        velocity0
+    ) == pytest.approx(
+        np.linalg.norm(velocity1),
         rel=RTOL_DEFAULT,
     )
 
 
 # ==========================================================
-# Reset
+# Orbital Mechanics
 # ==========================================================
 
-def test_reset(orbit):
-    """Verify reset restores the initial state."""
+def test_specific_mechanical_energy_conserved(orbit):
+    """Specific mechanical energy must remain constant."""
 
-    orbit.update(500.0)
+    r1, v1 = orbit.propagate(0.0)
 
-    orbit.reset()
+    r2, v2 = orbit.propagate(1500.0)
 
-    expected_position = np.array(
-        [
-            orbit.semi_major_axis,
-            0.0,
-            0.0,
-        ]
+    energy1 = (
+        np.linalg.norm(v1) ** 2 / 2.0
+        - orbit.mu / np.linalg.norm(r1)
     )
 
-    expected_velocity = np.array(
-        [
-            0.0,
-            orbit.semi_major_axis * orbit.mean_motion,
-            0.0,
-        ]
+    energy2 = (
+        np.linalg.norm(v2) ** 2 / 2.0
+        - orbit.mu / np.linalg.norm(r2)
     )
 
-    assert orbit.time == 0.0
+    assert energy1 == pytest.approx(
+        energy2,
+        rel=RTOL_DEFAULT,
+    )
+
+
+def test_angular_momentum_conserved(orbit):
+    """Angular momentum magnitude must remain constant."""
+
+    r1, v1 = orbit.propagate(0.0)
+
+    r2, v2 = orbit.propagate(2000.0)
+
+    h1 = np.cross(r1, v1)
+
+    h2 = np.cross(r2, v2)
+
+    assert np.linalg.norm(
+        h1
+    ) == pytest.approx(
+        np.linalg.norm(h2),
+        rel=RTOL_DEFAULT,
+    )
+
+
+def test_repeatability_after_one_period(orbit):
+    """State must repeat after one orbital period."""
+
+    r0, v0 = orbit.propagate(0.0)
+
+    r1, v1 = orbit.propagate(
+        orbit.period
+    )
 
     assert np.allclose(
-        orbit.position,
-        expected_position,
+        r0,
+        r1,
+        rtol=RTOL_DEFAULT,
     )
 
     assert np.allclose(
-        orbit.velocity,
-        expected_velocity,
+        v0,
+        v1,
+        rtol=RTOL_DEFAULT,
     )
+
+
+# ==========================================================
+# Input Validation
+# ==========================================================
+
+def test_negative_time(orbit):
+
+    with pytest.raises(ValueError):
+
+        orbit.propagate(-1.0)
+
+
+def test_invalid_time_type(orbit):
+
+    with pytest.raises(TypeError):
+
+        orbit.propagate("100")

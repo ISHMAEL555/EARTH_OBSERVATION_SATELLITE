@@ -7,14 +7,6 @@ import pytest
 
 from models.disturbances.disturbances import Disturbances
 
-from tests.test_config.constants import (
-    ZERO_VECTOR3,
-)
-
-from tests.test_config.tolerances import (
-    ATOL_TORQUE,
-)
-
 
 # ==========================================================
 # Dummy Disturbance Models
@@ -22,24 +14,24 @@ from tests.test_config.tolerances import (
 
 class DummyDisturbance:
     """
-    Dummy disturbance model returning a constant torque.
+    Dummy disturbance model returning a constant vector.
     """
 
-    def __init__(self, torque):
+    def __init__(self, output):
 
-        self.torque = np.asarray(
-            torque,
+        self.output = np.asarray(
+            output,
             dtype=float,
         )
 
     def compute(self, **kwargs):
 
-        return self.torque
+        return self.output
 
 
 class DummyCounterDisturbance:
     """
-    Dummy disturbance model counting compute() calls.
+    Counts the number of compute() calls.
     """
 
     def __init__(self):
@@ -82,21 +74,19 @@ def disturbances():
 # ==========================================================
 
 def test_default_initialization(disturbances):
-    """
-    Manager should start empty.
-    """
+    """Manager should start empty."""
 
-    assert len(disturbances._disturbance_models) == 0
+    assert len(
+        disturbances._disturbance_models
+    ) == 0
 
 
 # ==========================================================
-# Add
+# Registration
 # ==========================================================
 
 def test_add_disturbance(disturbances):
-    """
-    Verify disturbance registration.
-    """
+    """Verify disturbance registration."""
 
     model = DummyDisturbance(
         [
@@ -108,13 +98,13 @@ def test_add_disturbance(disturbances):
 
     disturbances.add(model)
 
-    assert len(disturbances._disturbance_models) == 1
+    assert len(
+        disturbances._disturbance_models
+    ) == 1
 
 
 def test_add_invalid_disturbance(disturbances):
-    """
-    Missing compute() should raise TypeError.
-    """
+    """Missing compute() should raise TypeError."""
 
     with pytest.raises(TypeError):
 
@@ -128,9 +118,7 @@ def test_add_invalid_disturbance(disturbances):
 # ==========================================================
 
 def test_remove_disturbance(disturbances):
-    """
-    Verify removal.
-    """
+    """Verify removal."""
 
     model = DummyDisturbance(
         [
@@ -144,13 +132,13 @@ def test_remove_disturbance(disturbances):
 
     disturbances.remove(model)
 
-    assert len(disturbances._disturbance_models) == 0
+    assert len(
+        disturbances._disturbance_models
+    ) == 0
 
 
 def test_remove_nonexistent_disturbance(disturbances):
-    """
-    Removing an unregistered disturbance should raise ValueError.
-    """
+    """Removing an unknown model should raise ValueError."""
 
     model = DummyDisturbance(
         [
@@ -170,33 +158,25 @@ def test_remove_nonexistent_disturbance(disturbances):
 # ==========================================================
 
 def test_clear_disturbances(disturbances):
-    """
-    Verify clear().
-    """
+    """Verify clear()."""
 
     disturbances.add(
         DummyDisturbance(
-            [
-                1.0,
-                0.0,
-                0.0,
-            ]
+            [1.0, 0.0, 0.0]
         )
     )
 
     disturbances.add(
         DummyDisturbance(
-            [
-                0.0,
-                1.0,
-                0.0,
-            ]
+            [0.0, 1.0, 0.0]
         )
     )
 
     disturbances.clear()
 
-    assert len(disturbances._disturbance_models) == 0
+    assert len(
+        disturbances._disturbance_models
+    ) == 0
 
 
 # ==========================================================
@@ -204,23 +184,15 @@ def test_clear_disturbances(disturbances):
 # ==========================================================
 
 def test_compute_empty_manager(disturbances):
-    """
-    Empty manager should return zero torque.
-    """
+    """Empty manager should return an empty list."""
 
-    torque = disturbances.compute()
+    outputs = disturbances.compute()
 
-    assert np.allclose(
-        torque,
-        ZERO_VECTOR3,
-        atol=ATOL_TORQUE,
-    )
+    assert outputs == []
 
 
 def test_compute_single_disturbance(disturbances):
-    """
-    Single disturbance should be returned unchanged.
-    """
+    """Single disturbance should return one output."""
 
     disturbances.add(
 
@@ -231,13 +203,16 @@ def test_compute_single_disturbance(disturbances):
                 3.0,
             ]
         )
+
     )
 
-    torque = disturbances.compute()
+    outputs = disturbances.compute()
+
+    assert len(outputs) == 1
 
     assert np.allclose(
 
-        torque,
+        outputs[0],
 
         np.array(
             [
@@ -247,14 +222,11 @@ def test_compute_single_disturbance(disturbances):
             ]
         ),
 
-        atol=ATOL_TORQUE,
     )
 
 
 def test_compute_multiple_disturbances(disturbances):
-    """
-    Total torque should equal the sum of all disturbances.
-    """
+    """Multiple disturbances should return outputs in registration order."""
 
     disturbances.add(
         DummyDisturbance(
@@ -276,27 +248,35 @@ def test_compute_multiple_disturbances(disturbances):
         )
     )
 
-    torque = disturbances.compute()
+    outputs = disturbances.compute()
 
-    expected = np.array(
-        [
-            5.0,
-            7.0,
-            9.0,
-        ]
+    assert len(outputs) == 2
+
+    assert np.allclose(
+        outputs[0],
+        np.array(
+            [
+                1.0,
+                2.0,
+                3.0,
+            ]
+        ),
     )
 
     assert np.allclose(
-        torque,
-        expected,
-        atol=ATOL_TORQUE,
+        outputs[1],
+        np.array(
+            [
+                4.0,
+                5.0,
+                6.0,
+            ]
+        ),
     )
 
 
 def test_compute_calls_each_model_once(disturbances):
-    """
-    Each registered disturbance should be evaluated exactly once.
-    """
+    """Each disturbance model should be evaluated exactly once."""
 
     model1 = DummyCounterDisturbance()
     model2 = DummyCounterDisturbance()
@@ -310,10 +290,8 @@ def test_compute_calls_each_model_once(disturbances):
     assert model2.calls == 1
 
 
-def test_compute_returns_vector(disturbances):
-    """
-    Returned disturbance should be a 3-vector.
-    """
+def test_compute_returns_numpy_arrays(disturbances):
+    """Outputs should be NumPy arrays."""
 
     disturbances.add(
         DummyDisturbance(
@@ -325,15 +303,16 @@ def test_compute_returns_vector(disturbances):
         )
     )
 
-    torque = disturbances.compute()
+    outputs = disturbances.compute()
 
-    assert torque.shape == (3,)
+    assert isinstance(
+        outputs[0],
+        np.ndarray,
+    )
 
 
 def test_compute_returns_finite_values(disturbances):
-    """
-    Returned disturbance should contain finite values.
-    """
+    """Outputs should contain finite values."""
 
     disturbances.add(
         DummyDisturbance(
@@ -345,6 +324,8 @@ def test_compute_returns_finite_values(disturbances):
         )
     )
 
-    torque = disturbances.compute()
+    outputs = disturbances.compute()
 
-    assert np.all(np.isfinite(torque))
+    assert np.all(
+        np.isfinite(outputs[0])
+    )

@@ -1,7 +1,5 @@
 """
-test_magnetorquers.py
-
-Unit tests for the Three-Axis Magnetorquer Assembly.
+Unit tests for models/actuators/magnetorquers.py
 """
 
 import numpy as np
@@ -10,269 +8,257 @@ import pytest
 from models.actuators.magnetorquers import Magnetorquers
 
 
-# ==========================================================
-# TC-MTQ-001
-# ==========================================================
-
-def test_initialization():
-    """Verify actuator initializes to zero state."""
-
-    mtq = Magnetorquers()
-
-    assert np.allclose(mtq.commanded_dipole, np.zeros(3))
-    assert np.allclose(mtq.actual_dipole, np.zeros(3))
-    assert np.allclose(mtq.body_torque, np.zeros(3))
+MAX_DIPOLE = 5.0
 
 
 # ==========================================================
-# TC-MTQ-002
+# Fixtures
 # ==========================================================
 
-def test_command_storage():
-    """Verify commanded dipole is stored correctly."""
+@pytest.fixture
+def magnetorquers():
+    """Create a nominal magnetorquer model."""
 
-    mtq = Magnetorquers()
-
-    command = np.array([1.0, 2.0, 3.0])
-
-    magnetic_field = np.array([
-        2.0e-5,
-        -1.5e-5,
-        3.5e-5,
-    ])
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    assert np.allclose(mtq.commanded_dipole, command)
+    return Magnetorquers(
+        max_dipole=MAX_DIPOLE,
+    )
 
 
 # ==========================================================
-# TC-MTQ-003
+# Initialization
 # ==========================================================
 
-def test_positive_saturation():
-    """Verify positive saturation."""
+def test_constructor(magnetorquers):
+    """Verify constructor stores parameters."""
 
-    mtq = Magnetorquers()
+    assert magnetorquers.max_dipole == pytest.approx(
+        MAX_DIPOLE
+    )
 
-    command = np.array([100.0, 100.0, 100.0])
 
-    magnetic_field = np.array([
-        2e-5,
-        1e-5,
-        3e-5,
-    ])
+def test_invalid_max_dipole():
+    """Maximum dipole must be positive."""
 
-    mtq.update(command, magnetic_field, dt=0.1)
+    with pytest.raises(ValueError):
 
-    expected = np.full(3, mtq.max_dipole)
-
-    assert np.allclose(mtq.actual_dipole, expected)
+        Magnetorquers(
+            max_dipole=0.0,
+        )
 
 
 # ==========================================================
-# TC-MTQ-004
+# Compute
 # ==========================================================
 
-def test_negative_saturation():
-    """Verify negative saturation."""
+def test_compute_returns_vectors(magnetorquers):
+    """Compute should return two 3-vectors."""
 
-    mtq = Magnetorquers()
+    actual_dipole, torque = magnetorquers.compute(
+        np.array([1.0, 2.0, 3.0]),
+        np.array([2e-5, -1e-5, 3e-5]),
+    )
 
-    command = np.array([-100.0, -100.0, -100.0])
-
-    magnetic_field = np.array([
-        2e-5,
-        1e-5,
-        3e-5,
-    ])
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    expected = np.full(3, -mtq.max_dipole)
-
-    assert np.allclose(mtq.actual_dipole, expected)
+    assert actual_dipole.shape == (3,)
+    assert torque.shape == (3,)
 
 
-# ==========================================================
-# TC-MTQ-005
-# ==========================================================
+def test_compute_returns_finite_values(magnetorquers):
+    """Outputs should contain finite values."""
 
-def test_zero_magnetic_field():
-    """Verify zero magnetic field produces zero torque."""
+    actual_dipole, torque = magnetorquers.compute(
+        np.array([1.0, 2.0, 3.0]),
+        np.array([2e-5, -1e-5, 3e-5]),
+    )
 
-    mtq = Magnetorquers()
-
-    command = np.array([5.0, 2.0, -1.0])
-
-    magnetic_field = np.zeros(3)
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    assert np.allclose(mtq.body_torque, np.zeros(3))
+    assert np.all(np.isfinite(actual_dipole))
+    assert np.all(np.isfinite(torque))
 
 
 # ==========================================================
-# TC-MTQ-006
+# Saturation
 # ==========================================================
 
-def test_zero_command():
-    """Verify zero dipole command produces zero torque."""
+def test_positive_saturation(magnetorquers):
+    """Positive dipole saturation."""
 
-    mtq = Magnetorquers()
+    actual_dipole, _ = magnetorquers.compute(
+        np.array([100.0, 100.0, 100.0]),
+        np.array([2e-5, 1e-5, 3e-5]),
+    )
 
-    command = np.zeros(3)
+    expected = np.full(3, MAX_DIPOLE)
 
-    magnetic_field = np.array([
-        2e-5,
-        -1e-5,
-        3e-5,
-    ])
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    assert np.allclose(mtq.body_torque, np.zeros(3))
+    assert np.allclose(
+        actual_dipole,
+        expected,
+    )
 
 
-# ==========================================================
-# TC-MTQ-007
-# ==========================================================
+def test_negative_saturation(magnetorquers):
+    """Negative dipole saturation."""
 
-def test_parallel_vectors():
-    """Verify parallel vectors produce zero torque."""
+    actual_dipole, _ = magnetorquers.compute(
+        np.array([-100.0, -100.0, -100.0]),
+        np.array([2e-5, 1e-5, 3e-5]),
+    )
 
-    mtq = Magnetorquers()
+    expected = np.full(3, -MAX_DIPOLE)
 
-    command = np.array([1.0, 0.0, 0.0])
-
-    magnetic_field = np.array([2.0, 0.0, 0.0])
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    assert np.allclose(mtq.body_torque, np.zeros(3))
+    assert np.allclose(
+        actual_dipole,
+        expected,
+    )
 
 
-# ==========================================================
-# TC-MTQ-008
-# ==========================================================
+def test_no_saturation(magnetorquers):
+    """Commands within limits should pass unchanged."""
 
-def test_cross_product():
-    """Verify orthogonal vectors."""
+    command = np.array([1.0, -2.0, 3.0])
 
-    mtq = Magnetorquers()
+    actual_dipole, _ = magnetorquers.compute(
+        command,
+        np.array([2e-5, 1e-5, 3e-5]),
+    )
 
-    command = np.array([1.0, 0.0, 0.0])
-
-    magnetic_field = np.array([0.0, 1.0, 0.0])
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    expected = np.array([0.0, 0.0, 1.0])
-
-    assert np.allclose(mtq.body_torque, expected)
+    assert np.allclose(
+        actual_dipole,
+        command,
+    )
 
 
 # ==========================================================
-# TC-MTQ-009
+# Physics
 # ==========================================================
 
-def test_right_hand_rule():
+def test_zero_command(magnetorquers):
+    """Zero dipole should produce zero torque."""
+
+    _, torque = magnetorquers.compute(
+        np.zeros(3),
+        np.array([2e-5, -1e-5, 3e-5]),
+    )
+
+    assert np.allclose(
+        torque,
+        np.zeros(3),
+    )
+
+
+def test_zero_magnetic_field(magnetorquers):
+    """Zero magnetic field should produce zero torque."""
+
+    _, torque = magnetorquers.compute(
+        np.array([1.0, 2.0, 3.0]),
+        np.zeros(3),
+    )
+
+    assert np.allclose(
+        torque,
+        np.zeros(3),
+    )
+
+
+def test_parallel_vectors(magnetorquers):
+    """Parallel vectors should produce zero torque."""
+
+    _, torque = magnetorquers.compute(
+        np.array([1.0, 0.0, 0.0]),
+        np.array([2.0, 0.0, 0.0]),
+    )
+
+    assert np.allclose(
+        torque,
+        np.zeros(3),
+    )
+
+
+def test_cross_product(magnetorquers):
+    """Verify cross product."""
+
+    _, torque = magnetorquers.compute(
+        np.array([1.0, 0.0, 0.0]),
+        np.array([0.0, 1.0, 0.0]),
+    )
+
+    expected = np.array(
+        [
+            0.0,
+            0.0,
+            1.0,
+        ]
+    )
+
+    assert np.allclose(
+        torque,
+        expected,
+    )
+
+
+def test_right_hand_rule(magnetorquers):
     """Verify right-hand rule."""
 
-    mtq = Magnetorquers()
+    _, torque = magnetorquers.compute(
+        np.array([0.0, 1.0, 0.0]),
+        np.array([0.0, 0.0, 1.0]),
+    )
 
-    command = np.array([0.0, 1.0, 0.0])
+    expected = np.array(
+        [
+            1.0,
+            0.0,
+            0.0,
+        ]
+    )
 
-    magnetic_field = np.array([0.0, 0.0, 1.0])
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    expected = np.array([1.0, 0.0, 0.0])
-
-    assert np.allclose(mtq.body_torque, expected)
+    assert np.allclose(
+        torque,
+        expected,
+    )
 
 
 # ==========================================================
-# TC-MTQ-010
+# Input Validation
 # ==========================================================
 
-def test_invalid_command_vector():
-    """Verify invalid command vector."""
-
-    mtq = Magnetorquers()
-
-    magnetic_field = np.zeros(3)
+def test_invalid_command_vector(magnetorquers):
+    """Invalid commanded dipole."""
 
     with pytest.raises(ValueError):
 
-        mtq.update(
+        magnetorquers.compute(
             np.array([1.0, 2.0]),
-            magnetic_field,
-            dt=0.1,
+            np.zeros(3),
         )
 
 
-# ==========================================================
-# TC-MTQ-011
-# ==========================================================
-
-def test_invalid_magnetic_field():
-    """Verify invalid magnetic field."""
-
-    mtq = Magnetorquers()
+def test_invalid_magnetic_field(magnetorquers):
+    """Invalid magnetic field."""
 
     with pytest.raises(ValueError):
 
-        mtq.update(
+        magnetorquers.compute(
             np.zeros(3),
             np.array([1.0, 2.0]),
-            dt=0.1,
         )
 
 
-# ==========================================================
-# TC-MTQ-012
-# ==========================================================
-
-def test_nan_input():
-    """Verify NaN input."""
-
-    mtq = Magnetorquers()
-
-    command = np.array([np.nan, 0.0, 0.0])
-
-    magnetic_field = np.zeros(3)
+def test_nan_command(magnetorquers):
+    """NaN commanded dipole."""
 
     with pytest.raises(ValueError):
 
-        mtq.update(
-            command,
-            magnetic_field,
-            dt=0.1,
+        magnetorquers.compute(
+            np.array([np.nan, 0.0, 0.0]),
+            np.zeros(3),
         )
 
 
-# ==========================================================
-# TC-MTQ-013
-# ==========================================================
+def test_nan_magnetic_field(magnetorquers):
+    """NaN magnetic field."""
 
-def test_reset():
-    """Verify reset restores zero state."""
+    with pytest.raises(ValueError):
 
-    mtq = Magnetorquers()
-
-    command = np.array([1.0, 2.0, 3.0])
-
-    magnetic_field = np.array([
-        2e-5,
-        -1e-5,
-        3e-5,
-    ])
-
-    mtq.update(command, magnetic_field, dt=0.1)
-
-    mtq.reset()
-
-    assert np.allclose(mtq.commanded_dipole, np.zeros(3))
-    assert np.allclose(mtq.actual_dipole, np.zeros(3))
-    assert np.allclose(mtq.body_torque, np.zeros(3))
+        magnetorquers.compute(
+            np.zeros(3),
+            np.array([0.0, np.nan, 0.0]),
+        )

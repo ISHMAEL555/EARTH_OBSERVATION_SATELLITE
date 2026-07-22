@@ -2,17 +2,10 @@
 tests/unit_tests/unit_test_models/unit_test_actuators/test_rw_pyramid.py
 
 Unit Tests
-----------
 
-Subsystem:
-    Four-Wheel Pyramidal Reaction Wheel Assembly
-
-Author:
-    Kowluri Ishmael
-
-Description
------------
-Unit tests for the Reaction Wheel Pyramid actuator model.
+Subsystem
+---------
+Four-Wheel Pyramidal Reaction Wheel Assembly
 """
 
 import numpy as np
@@ -22,110 +15,149 @@ from models.actuators.rw_pyramid import RWPyramid
 
 
 # ==========================================================
+# Test Configuration
+# ==========================================================
+
+MAX_TORQUE = 0.05          # N·m
+MAX_MOMENTUM = 1.0         # N·m·s
+
+WHEEL_AXES = np.array(
+    [
+        [1.0, -1.0, -1.0, 1.0],
+        [1.0,  1.0, -1.0,-1.0],
+        [1.0,  1.0,  1.0, 1.0],
+    ],
+    dtype=float,
+)
+
+WHEEL_AXES /= np.linalg.norm(
+    WHEEL_AXES,
+    axis=0,
+)
+
+
+# ==========================================================
+# Fixtures
+# ==========================================================
+
+@pytest.fixture
+def rw():
+    return RWPyramid(
+        wheel_axes=WHEEL_AXES,
+        max_torque=MAX_TORQUE,
+        max_momentum=MAX_MOMENTUM,
+    )
+
+
+# ==========================================================
 # TC-RW-001
 # ==========================================================
 
-def test_initialization():
-    """Verify correct initialization."""
+def test_constructor(rw):
+    """Verify constructor."""
 
-    rw = RWPyramid()
+    assert rw.num_wheels == 4
 
-    assert np.allclose(rw.commanded_body_torque, np.zeros(3))
-    assert np.allclose(rw.commanded_wheel_torque, np.zeros(4))
-    assert np.allclose(rw.actual_wheel_torque, np.zeros(4))
-    assert np.allclose(rw.wheel_momentum, np.zeros(4))
-    assert np.allclose(rw.body_torque, np.zeros(3))
+    assert rw.wheel_axes.shape == (3, 4)
+
+    assert rw.max_torque == pytest.approx(
+        MAX_TORQUE
+    )
+
+    assert rw.max_momentum == pytest.approx(
+        MAX_MOMENTUM
+    )
+
+    assert np.allclose(
+        rw.actual_wheel_torque,
+        np.zeros(4),
+    )
+
+    assert np.allclose(
+        rw.wheel_momentum,
+        np.zeros(4),
+    )
+
+    assert np.allclose(
+        rw.body_torque,
+        np.zeros(3),
+    )
 
 
 # ==========================================================
 # TC-RW-002
 # ==========================================================
 
-def test_torque_allocation():
-    """Verify body torque allocation."""
+def test_invalid_max_torque():
 
-    rw = RWPyramid()
+    with pytest.raises(ValueError):
 
-    command = np.array([0.10, 0.00, 0.00])
-
-    rw.update(command, dt=0.1)
-
-    assert rw.commanded_wheel_torque.shape == (4,)
-    assert np.all(np.isfinite(rw.commanded_wheel_torque))
+        RWPyramid(
+            wheel_axes=WHEEL_AXES,
+            max_torque=0.0,
+            max_momentum=1.0,
+        )
 
 
 # ==========================================================
 # TC-RW-003
 # ==========================================================
 
-def test_positive_torque_saturation():
-    """Verify positive wheel torque saturation."""
+def test_invalid_max_momentum():
 
-    rw = RWPyramid()
+    with pytest.raises(ValueError):
 
-    command = np.array([100.0, 100.0, 100.0])
-
-    rw.update(command, dt=0.1)
-
-    assert np.all(
-        rw.actual_wheel_torque <= rw.max_torque
-    )
+        RWPyramid(
+            wheel_axes=WHEEL_AXES,
+            max_torque=0.05,
+            max_momentum=0.0,
+        )
 
 
 # ==========================================================
 # TC-RW-004
 # ==========================================================
 
-def test_negative_torque_saturation():
-    """Verify negative wheel torque saturation."""
+def test_invalid_wheel_axes():
 
-    rw = RWPyramid()
+    with pytest.raises(ValueError):
 
-    command = np.array([-100.0, -100.0, -100.0])
-
-    rw.update(command, dt=0.1)
-
-    assert np.all(
-        rw.actual_wheel_torque >= -rw.max_torque
-    )
+        RWPyramid(
+            wheel_axes=np.eye(4),
+            max_torque=0.05,
+            max_momentum=1.0,
+        )
 
 
 # ==========================================================
 # TC-RW-005
 # ==========================================================
 
-def test_momentum_integration():
-    """Verify wheel momentum integration."""
+def test_update_returns_vectors(rw):
 
-    rw = RWPyramid()
-
-    command = np.array([0.20, 0.00, 0.00])
-
-    rw.update(command, dt=0.5)
-
-    assert np.any(
-        np.abs(rw.wheel_momentum) > 0.0
+    wheel_torque, momentum, body_torque = rw.update(
+        np.array([0.1, 0.0, 0.0]),
+        dt=0.1,
     )
+
+    assert wheel_torque.shape == (4,)
+    assert momentum.shape == (4,)
+    assert body_torque.shape == (3,)
 
 
 # ==========================================================
 # TC-RW-006
 # ==========================================================
 
-def test_momentum_saturation():
-    """Verify wheel momentum saturation."""
+def test_positive_torque_saturation(rw):
 
-    rw = RWPyramid()
-
-    command = np.array([100.0, 100.0, 100.0])
-
-    for _ in range(500):
-
-        rw.update(command, dt=0.1)
+    wheel_torque, _, _ = rw.update(
+        np.array([100.0, 100.0, 100.0]),
+        dt=0.1,
+    )
 
     assert np.all(
-        np.abs(rw.wheel_momentum)
-        <= rw.max_momentum
+        wheel_torque <= MAX_TORQUE
     )
 
 
@@ -133,35 +165,31 @@ def test_momentum_saturation():
 # TC-RW-007
 # ==========================================================
 
-def test_total_momentum():
-    """Verify total body momentum calculation."""
+def test_negative_torque_saturation(rw):
 
-    rw = RWPyramid()
+    wheel_torque, _, _ = rw.update(
+        np.array([-100.0, -100.0, -100.0]),
+        dt=0.1,
+    )
 
-    command = np.array([0.10, 0.05, 0.00])
-
-    rw.update(command, dt=1.0)
-
-    H = rw.get_total_momentum()
-
-    assert H.shape == (3,)
-    assert np.all(np.isfinite(H))
+    assert np.all(
+        wheel_torque >= -MAX_TORQUE
+    )
 
 
 # ==========================================================
 # TC-RW-008
 # ==========================================================
 
-def test_total_momentum_capacity():
-    """Verify total momentum capacity."""
+def test_momentum_integration(rw):
 
-    rw = RWPyramid()
+    _, momentum, _ = rw.update(
+        np.array([0.2, 0.0, 0.0]),
+        dt=0.5,
+    )
 
-    expected = rw.num_wheels * rw.max_momentum
-
-    assert np.isclose(
-        rw.get_total_momentum_capacity(),
-        expected
+    assert np.any(
+        np.abs(momentum) > 0.0
     )
 
 
@@ -169,26 +197,18 @@ def test_total_momentum_capacity():
 # TC-RW-009
 # ==========================================================
 
-def test_zero_torque_command():
-    """Verify zero command produces zero outputs."""
+def test_momentum_saturation(rw):
 
-    rw = RWPyramid()
+    for _ in range(500):
 
-    rw.update(np.zeros(3), dt=0.1)
+        rw.update(
+            np.array([100.0, 100.0, 100.0]),
+            dt=0.1,
+        )
 
-    assert np.allclose(
-        rw.actual_wheel_torque,
-        np.zeros(4)
-    )
-
-    assert np.allclose(
-        rw.wheel_momentum,
-        np.zeros(4)
-    )
-
-    assert np.allclose(
-        rw.body_torque,
-        np.zeros(3)
+    assert np.all(
+        np.abs(rw.wheel_momentum)
+        <= MAX_MOMENTUM
     )
 
 
@@ -196,10 +216,70 @@ def test_zero_torque_command():
 # TC-RW-010
 # ==========================================================
 
-def test_invalid_body_torque_vector():
-    """Verify invalid input vector."""
+def test_total_momentum(rw):
 
-    rw = RWPyramid()
+    rw.update(
+        np.array([0.10, 0.05, 0.00]),
+        dt=1.0,
+    )
+
+    H = rw.get_total_momentum()
+
+    assert H.shape == (3,)
+
+    assert np.all(
+        np.isfinite(H)
+    )
+
+
+# ==========================================================
+# TC-RW-011
+# ==========================================================
+
+def test_total_momentum_capacity(rw):
+
+    expected = (
+        rw.num_wheels
+        * rw.max_momentum
+    )
+
+    assert rw.get_total_momentum_capacity() == pytest.approx(
+        expected
+    )
+
+
+# ==========================================================
+# TC-RW-012
+# ==========================================================
+
+def test_zero_command(rw):
+
+    wheel_torque, momentum, body_torque = rw.update(
+        np.zeros(3),
+        dt=0.1,
+    )
+
+    assert np.allclose(
+        wheel_torque,
+        np.zeros(4),
+    )
+
+    assert np.allclose(
+        momentum,
+        np.zeros(4),
+    )
+
+    assert np.allclose(
+        body_torque,
+        np.zeros(3),
+    )
+
+
+# ==========================================================
+# TC-RW-013
+# ==========================================================
+
+def test_invalid_body_torque_vector(rw):
 
     with pytest.raises(ValueError):
 
@@ -210,13 +290,24 @@ def test_invalid_body_torque_vector():
 
 
 # ==========================================================
-# TC-RW-011
+# TC-RW-014
 # ==========================================================
 
-def test_nan_input():
-    """Verify NaN input rejection."""
+def test_invalid_dt(rw):
 
-    rw = RWPyramid()
+    with pytest.raises(ValueError):
+
+        rw.update(
+            np.zeros(3),
+            dt=0.0,
+        )
+
+
+# ==========================================================
+# TC-RW-015
+# ==========================================================
+
+def test_nan_input(rw):
 
     with pytest.raises(ValueError):
 
@@ -227,13 +318,10 @@ def test_nan_input():
 
 
 # ==========================================================
-# TC-RW-012
+# TC-RW-016
 # ==========================================================
 
-def test_reset():
-    """Verify reset functionality."""
-
-    rw = RWPyramid()
+def test_reset(rw):
 
     rw.update(
         np.array([0.2, 0.1, 0.0]),
@@ -243,26 +331,16 @@ def test_reset():
     rw.reset()
 
     assert np.allclose(
-        rw.commanded_body_torque,
-        np.zeros(3)
-    )
-
-    assert np.allclose(
-        rw.commanded_wheel_torque,
-        np.zeros(4)
-    )
-
-    assert np.allclose(
         rw.actual_wheel_torque,
-        np.zeros(4)
+        np.zeros(4),
     )
 
     assert np.allclose(
         rw.wheel_momentum,
-        np.zeros(4)
+        np.zeros(4),
     )
 
     assert np.allclose(
         rw.body_torque,
-        np.zeros(3)
+        np.zeros(3),
     )

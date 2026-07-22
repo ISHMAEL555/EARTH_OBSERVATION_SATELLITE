@@ -7,14 +7,23 @@ import pytest
 
 from models.environment.magnetic_field import MagneticField
 
-from config import EARTH_MAGNETIC_DIPOLE_MOMENT
-
-from tests.test_config.constants import IDENTITY3
 from tests.test_config.orbit import MIN_ALTITUDE
-from tests.test_config.tolerances import (
-    ATOL_DCM,
-    RTOL_DEFAULT,
+from tests.test_config.tolerances import RTOL_DEFAULT
+
+
+# ==========================================================
+# Test Constants
+# ==========================================================
+
+EARTH_MAGNETIC_DIPOLE_MOMENT = np.array(
+    [
+        0.0,
+        0.0,
+        7.94e22,
+    ]
 )
+
+EARTH_RADIUS = 6378137.0
 
 
 # ==========================================================
@@ -23,19 +32,20 @@ from tests.test_config.tolerances import (
 
 @pytest.fixture
 def magnetic_field():
-    """Create a default MagneticField model."""
-    return MagneticField()
+    """Create a default magnetic field model."""
+
+    return MagneticField(
+        EARTH_MAGNETIC_DIPOLE_MOMENT
+    )
 
 
 @pytest.fixture
 def spacecraft_position():
     """Nominal spacecraft position in ECI."""
 
-    earth_radius = 6378137.0
-
     return np.array(
         [
-            earth_radius + MIN_ALTITUDE,
+            EARTH_RADIUS + MIN_ALTITUDE,
             0.0,
             0.0,
         ]
@@ -47,12 +57,22 @@ def spacecraft_position():
 # ==========================================================
 
 def test_default_initialization(magnetic_field):
-    """Verify model initializes correctly."""
+    """Verify constructor stores dipole moment."""
 
     assert np.allclose(
-        magnetic_field.earth_magnetic_dipole_moment,
+        magnetic_field.magnetic_dipole_moment,
         EARTH_MAGNETIC_DIPOLE_MOMENT,
     )
+
+
+def test_invalid_dipole_shape():
+    """Dipole moment must be a 3-vector."""
+
+    with pytest.raises(ValueError):
+
+        MagneticField(
+            np.zeros(2)
+        )
 
 
 # ==========================================================
@@ -65,27 +85,25 @@ def test_compute_returns_vector(
 ):
     """Returned magnetic field must be a 3-vector."""
 
-    magnetic_field_body = magnetic_field.compute(
-        IDENTITY3,
-        spacecraft_position,
+    magnetic_field_eci = magnetic_field.compute(
+        spacecraft_position
     )
 
-    assert magnetic_field_body.shape == (3,)
+    assert magnetic_field_eci.shape == (3,)
 
 
 def test_compute_returns_numpy_array(
     magnetic_field,
     spacecraft_position,
 ):
-    """Returned object must be a numpy array."""
+    """Returned object must be a NumPy array."""
 
-    magnetic_field_body = magnetic_field.compute(
-        IDENTITY3,
-        spacecraft_position,
+    magnetic_field_eci = magnetic_field.compute(
+        spacecraft_position
     )
 
     assert isinstance(
-        magnetic_field_body,
+        magnetic_field_eci,
         np.ndarray,
     )
 
@@ -96,12 +114,15 @@ def test_field_is_finite(
 ):
     """Magnetic field must contain finite values."""
 
-    magnetic_field_body = magnetic_field.compute(
-        IDENTITY3,
-        spacecraft_position,
+    magnetic_field_eci = magnetic_field.compute(
+        spacecraft_position
     )
 
-    assert np.all(np.isfinite(magnetic_field_body))
+    assert np.all(
+        np.isfinite(
+            magnetic_field_eci
+        )
+    )
 
 
 def test_repeatability(
@@ -111,13 +132,11 @@ def test_repeatability(
     """Repeated evaluations should produce identical results."""
 
     B1 = magnetic_field.compute(
-        IDENTITY3,
-        spacecraft_position,
+        spacecraft_position
     )
 
     B2 = magnetic_field.compute(
-        IDENTITY3,
-        spacecraft_position,
+        spacecraft_position
     )
 
     assert np.allclose(
@@ -127,39 +146,9 @@ def test_repeatability(
     )
 
 
-def test_identity_dcm_preserves_field(
-    magnetic_field,
-    spacecraft_position,
-):
-    """Identity DCM should not alter field magnitude."""
-
-    magnetic_field_body = magnetic_field.compute(
-        IDENTITY3,
-        spacecraft_position,
-    )
-
-    assert np.linalg.norm(
-        magnetic_field_body
-    ) > 0.0
-
-
 # ==========================================================
 # Input Validation
 # ==========================================================
-
-def test_invalid_dcm_shape(
-    magnetic_field,
-    spacecraft_position,
-):
-    """DCM must be 3×3."""
-
-    with pytest.raises(ValueError):
-
-        magnetic_field.compute(
-            np.eye(2),
-            spacecraft_position,
-        )
-
 
 def test_invalid_position_shape(
     magnetic_field,
@@ -169,8 +158,7 @@ def test_invalid_position_shape(
     with pytest.raises(ValueError):
 
         magnetic_field.compute(
-            IDENTITY3,
-            np.zeros(2),
+            np.zeros(2)
         )
 
 
@@ -182,8 +170,7 @@ def test_zero_position_vector(
     with pytest.raises(ValueError):
 
         magnetic_field.compute(
-            IDENTITY3,
-            np.zeros(3),
+            np.zeros(3)
         )
 
 
@@ -194,13 +181,11 @@ def test_zero_position_vector(
 def test_field_decreases_with_altitude(
     magnetic_field,
 ):
-    """Magnetic field magnitude should decrease with altitude."""
-
-    earth_radius = 6378137.0
+    """Magnetic field magnitude decreases with altitude."""
 
     low_position = np.array(
         [
-            earth_radius + 300e3,
+            EARTH_RADIUS + 300e3,
             0.0,
             0.0,
         ]
@@ -208,24 +193,58 @@ def test_field_decreases_with_altitude(
 
     high_position = np.array(
         [
-            earth_radius + 1000e3,
+            EARTH_RADIUS + 1000e3,
             0.0,
             0.0,
         ]
     )
 
     B_low = magnetic_field.compute(
-        IDENTITY3,
-        low_position,
+        low_position
     )
 
     B_high = magnetic_field.compute(
-        IDENTITY3,
-        high_position,
+        high_position
     )
 
     assert (
         np.linalg.norm(B_low)
         >
         np.linalg.norm(B_high)
+    )
+
+
+def test_inverse_cube_relationship(
+    magnetic_field,
+):
+    """
+    Verify magnetic field approximately follows
+    the inverse-cube law.
+    """
+
+    r1 = EARTH_RADIUS + 400e3
+    r2 = EARTH_RADIUS + 800e3
+
+    B1 = magnetic_field.compute(
+        np.array([r1, 0.0, 0.0])
+    )
+
+    B2 = magnetic_field.compute(
+        np.array([r2, 0.0, 0.0])
+    )
+
+    measured_ratio = (
+        np.linalg.norm(B1)
+        /
+        np.linalg.norm(B2)
+    )
+
+    expected_ratio = (
+        r2 / r1
+    ) ** 3
+
+    assert np.isclose(
+        measured_ratio,
+        expected_ratio,
+        rtol=5e-2,
     )

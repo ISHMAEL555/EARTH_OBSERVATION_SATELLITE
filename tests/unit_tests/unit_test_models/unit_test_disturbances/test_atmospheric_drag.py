@@ -5,18 +5,14 @@ Unit tests for models/disturbances/atmospheric_drag.py
 import numpy as np
 import pytest
 
-from config import R_EARTH
-
 from models.disturbances.atmospheric_drag import AtmosphericDrag
 
 from tests.test_config.constants import (
-    IDENTITY3,
     ZERO_VECTOR3,
 )
 
 from tests.test_config.tolerances import (
     ATOL_FORCE,
-    ATOL_TORQUE,
     RTOL_DEFAULT,
 )
 
@@ -27,52 +23,24 @@ from tests.test_config.tolerances import (
 
 @pytest.fixture
 def atmospheric_drag():
-    """
-    Create a default AtmosphericDrag model.
-    """
+    """Create a nominal atmospheric drag model."""
 
     return AtmosphericDrag(
-
-        earth_radius=R_EARTH,
-
-        atmosphere_surface_density=1.225,
-
-        atmosphere_scale_height=8500.0,
-
         drag_coefficient=2.2,
-
         reference_area=0.4,
-
-        center_of_pressure=np.array(
-            [
-                0.10,
-                0.0,
-                0.0,
-            ]
-        ),
     )
 
 
 @pytest.fixture
-def spacecraft_position():
-    """
-    Nominal spacecraft position.
-    """
+def density():
+    """Representative atmospheric density."""
 
-    return np.array(
-        [
-            R_EARTH + 600e3,
-            0.0,
-            0.0,
-        ]
-    )
+    return 1.0e-12
 
 
 @pytest.fixture
 def spacecraft_velocity():
-    """
-    Nominal spacecraft velocity.
-    """
+    """Representative spacecraft velocity."""
 
     return np.array(
         [
@@ -87,12 +55,8 @@ def spacecraft_velocity():
 # Initialization
 # ==========================================================
 
-def test_default_initialization(atmospheric_drag):
-    """
-    Verify constructor stores parameters correctly.
-    """
-
-    assert atmospheric_drag.earth_radius == R_EARTH
+def test_constructor(atmospheric_drag):
+    """Verify constructor stores parameters."""
 
     assert atmospheric_drag.drag_coefficient == pytest.approx(
         2.2
@@ -102,76 +66,70 @@ def test_default_initialization(atmospheric_drag):
         0.4
     )
 
-    assert atmospheric_drag.center_of_pressure.shape == (3,)
+
+def test_invalid_drag_coefficient():
+
+    with pytest.raises(ValueError):
+
+        AtmosphericDrag(
+            drag_coefficient=-1.0,
+            reference_area=0.4,
+        )
 
 
-# ==========================================================
-# Atmospheric Density
-# ==========================================================
+def test_invalid_reference_area():
 
-def test_density_positive(atmospheric_drag):
-    """
-    Density at sea level should be positive.
-    """
+    with pytest.raises(ValueError):
 
-    density = atmospheric_drag._compute_density(0.0)
-
-    assert density > 0.0
-
-
-def test_density_decreases_with_altitude(
-    atmospheric_drag,
-):
-    """
-    Density should decrease with altitude.
-    """
-
-    rho0 = atmospheric_drag._compute_density(0.0)
-
-    rho600 = atmospheric_drag._compute_density(
-        600e3
-    )
-
-    assert rho600 < rho0
-
-
-def test_negative_altitude_handled(
-    atmospheric_drag,
-):
-    """
-    Negative altitude should be clipped to zero.
-    """
-
-    rho_negative = atmospheric_drag._compute_density(
-        -100.0
-    )
-
-    rho_zero = atmospheric_drag._compute_density(
-        0.0
-    )
-
-    assert rho_negative == pytest.approx(
-        rho_zero,
-        rel=RTOL_DEFAULT,
-    )
+        AtmosphericDrag(
+            drag_coefficient=2.2,
+            reference_area=-1.0,
+        )
 
 
 # ==========================================================
 # Drag Force
 # ==========================================================
 
+def test_compute_returns_vector(
+    atmospheric_drag,
+    density,
+    spacecraft_velocity,
+):
+    """Compute should return a 3-vector."""
+
+    force = atmospheric_drag.compute(
+        density,
+        spacecraft_velocity,
+    )
+
+    assert force.shape == (3,)
+
+
+def test_compute_returns_finite_values(
+    atmospheric_drag,
+    density,
+    spacecraft_velocity,
+):
+    """Computed drag force should contain finite values."""
+
+    force = atmospheric_drag.compute(
+        density,
+        spacecraft_velocity,
+    )
+
+    assert np.all(np.isfinite(force))
+
+
 def test_zero_velocity_returns_zero_force(
     atmospheric_drag,
+    density,
 ):
-    """
-    Zero velocity should produce zero drag force.
-    """
+    """Zero velocity should produce zero drag."""
 
-    force = atmospheric_drag._compute_drag_force(
-
-        density=1.225,
-
-        spacecraft_velocity_eci=np.zeros(3),
+    force = atmospheric_drag.compute(
+        density,
+        np.zeros(3),
     )
 
     assert np.allclose(
@@ -183,10 +141,9 @@ def test_zero_velocity_returns_zero_force(
 
 def test_drag_force_opposes_velocity(
     atmospheric_drag,
+    density,
 ):
-    """
-    Drag force should oppose velocity.
-    """
+    """Drag must oppose the velocity vector."""
 
     velocity = np.array(
         [
@@ -196,50 +153,22 @@ def test_drag_force_opposes_velocity(
         ]
     )
 
-    force = atmospheric_drag._compute_drag_force(
-        density=1e-12,
-        spacecraft_velocity_eci=velocity,
+    force = atmospheric_drag.compute(
+        density,
+        velocity,
     )
 
     assert force[0] < 0.0
 
 
-def test_drag_force_is_finite(
-    atmospheric_drag,
-):
-    """
-    Drag force should contain finite values.
-    """
-
-    force = atmospheric_drag._compute_drag_force(
-
-        density=1e-12,
-
-        spacecraft_velocity_eci=np.array(
-            [
-                7500.0,
-                0.0,
-                0.0,
-            ]
-        ),
-    )
-
-    assert np.all(np.isfinite(force))
-
-
 def test_drag_force_increases_with_velocity(
     atmospheric_drag,
+    density,
 ):
-    """
-    Drag force magnitude should increase with speed.
-    """
+    """Drag magnitude should increase with speed."""
 
-    density = 1e-12
-
-    force1 = atmospheric_drag._compute_drag_force(
-
+    force1 = atmospheric_drag.compute(
         density,
-
         np.array(
             [
                 7000.0,
@@ -249,10 +178,8 @@ def test_drag_force_increases_with_velocity(
         ),
     )
 
-    force2 = atmospheric_drag._compute_drag_force(
-
+    force2 = atmospheric_drag.compute(
         density,
-
         np.array(
             [
                 8000.0,
@@ -265,91 +192,25 @@ def test_drag_force_increases_with_velocity(
     assert np.linalg.norm(force2) > np.linalg.norm(force1)
 
 
-# ==========================================================
-# Atmospheric Drag Torque
-# ==========================================================
-
-def test_compute_returns_vector(
+def test_drag_force_scales_with_density(
     atmospheric_drag,
-    spacecraft_position,
     spacecraft_velocity,
 ):
-    """
-    Compute should return a 3-vector.
-    """
+    """Drag magnitude should increase with density."""
 
-    torque = atmospheric_drag.compute(
-
-        IDENTITY3,
-
-        spacecraft_position,
-
+    force1 = atmospheric_drag.compute(
+        1.0e-13,
         spacecraft_velocity,
     )
 
-    assert torque.shape == (3,)
-
-
-def test_compute_returns_finite_values(
-    atmospheric_drag,
-    spacecraft_position,
-    spacecraft_velocity,
-):
-    """
-    Computed torque should contain finite values.
-    """
-
-    torque = atmospheric_drag.compute(
-
-        IDENTITY3,
-
-        spacecraft_position,
-
+    force2 = atmospheric_drag.compute(
+        2.0e-13,
         spacecraft_velocity,
     )
 
-    assert np.all(np.isfinite(torque))
-
-
-def test_zero_center_of_pressure_returns_zero_torque(
-    spacecraft_position,
-    spacecraft_velocity,
-):
-    """
-    Zero center of pressure should produce zero torque.
-    """
-
-    model = AtmosphericDrag(
-
-        earth_radius=R_EARTH,
-
-        atmosphere_surface_density=1.225,
-
-        atmosphere_scale_height=8500.0,
-
-        drag_coefficient=2.2,
-
-        reference_area=0.4,
-
-        center_of_pressure=np.zeros(3),
-    )
-
-    torque = model.compute(
-
-        IDENTITY3,
-
-        spacecraft_position,
-
-        spacecraft_velocity,
-    )
-
-    assert np.allclose(
-
-        torque,
-
-        ZERO_VECTOR3,
-
-        atol=ATOL_TORQUE,
+    assert np.linalg.norm(force2) == pytest.approx(
+        2.0 * np.linalg.norm(force1),
+        rel=RTOL_DEFAULT,
     )
 
 
@@ -357,62 +218,43 @@ def test_zero_center_of_pressure_returns_zero_torque(
 # Input Validation
 # ==========================================================
 
-def test_invalid_dcm_shape(
+def test_negative_density(
     atmospheric_drag,
-    spacecraft_position,
     spacecraft_velocity,
 ):
-    """
-    Invalid DCM should raise ValueError.
-    """
+    """Negative density should raise ValueError."""
 
     with pytest.raises(ValueError):
 
         atmospheric_drag.compute(
-
-            np.eye(2),
-
-            spacecraft_position,
-
-            spacecraft_velocity,
-        )
-
-
-def test_invalid_position_shape(
-    atmospheric_drag,
-    spacecraft_velocity,
-):
-    """
-    Invalid position vector should raise ValueError.
-    """
-
-    with pytest.raises(ValueError):
-
-        atmospheric_drag.compute(
-
-            IDENTITY3,
-
-            np.zeros(2),
-
+            -1.0,
             spacecraft_velocity,
         )
 
 
 def test_invalid_velocity_shape(
     atmospheric_drag,
-    spacecraft_position,
+    density,
 ):
-    """
-    Invalid velocity vector should raise ValueError.
-    """
+    """Velocity must have shape (3,)."""
 
     with pytest.raises(ValueError):
 
         atmospheric_drag.compute(
-
-            IDENTITY3,
-
-            spacecraft_position,
-
+            density,
             np.zeros(2),
+        )
+
+
+def test_invalid_velocity_type(
+    atmospheric_drag,
+    density,
+):
+    """Velocity must be array-like with shape (3,)."""
+
+    with pytest.raises(ValueError):
+
+        atmospheric_drag.compute(
+            density,
+            np.eye(3),
         )
