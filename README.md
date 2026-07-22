@@ -1,4 +1,4 @@
-### HIIIIIIIIIIIIIIIIIIIIIIII
+### Hello world
 
 # Hybrid ADCS for an Agile Earth Observation Satellite
 
