@@ -1,4 +1,6 @@
 """
+tests/unit_tests/unit_test_controllers/test_quaternion_pd.py
+
 Unit Tests
 ----------
 
@@ -18,121 +20,141 @@ from controllers.quaternion_pd import QuaternionPD
 
 
 # ==========================================================
-# TC-PD-001
-# Controller Initialization
+# Test Configuration
 # ==========================================================
 
-def test_initialization():
+KP = np.diag([5.0, 5.0, 5.0])
+KD = np.diag([2.0, 2.0, 2.0])
 
-    controller = QuaternionPD()
 
-    assert np.allclose(controller.commanded_torque, np.zeros(3))
-    assert np.allclose(controller.attitude_error, np.zeros(3))
-    assert np.allclose(controller.rate_error, np.zeros(3))
+# ==========================================================
+# Fixtures
+# ==========================================================
+
+@pytest.fixture
+def controller():
+
+    return QuaternionPD(
+
+        proportional_gain=KP,
+
+        derivative_gain=KD,
+
+    )
+
+
+# ==========================================================
+# TC-PD-001
+# ==========================================================
+
+def test_constructor(controller):
+
+    assert np.allclose(controller.Kp, KP)
+
+    assert np.allclose(controller.Kd, KD)
 
 
 # ==========================================================
 # TC-PD-002
-# Zero attitude error
 # ==========================================================
 
-def test_zero_error():
+def test_invalid_proportional_gain():
 
-    controller = QuaternionPD()
+    with pytest.raises(ValueError):
 
-    q = np.array([1.0, 0.0, 0.0, 0.0])
-    omega = np.zeros(3)
+        QuaternionPD(
 
-    torque = controller.update(q, q, omega)
+            proportional_gain=np.eye(2),
 
-    assert np.allclose(torque, np.zeros(3))
+            derivative_gain=KD,
+
+        )
 
 
 # ==========================================================
 # TC-PD-003
-# Pure attitude error
 # ==========================================================
 
-def test_attitude_error_generates_torque():
+def test_invalid_derivative_gain():
 
-    controller = QuaternionPD()
+    with pytest.raises(ValueError):
 
-    angle = np.deg2rad(10.0)
+        QuaternionPD(
 
-    q_current = np.array([1.0, 0.0, 0.0, 0.0])
+            proportional_gain=KP,
 
-    q_desired = np.array([
-        np.cos(angle / 2),
-        np.sin(angle / 2),
-        0.0,
-        0.0
-    ])
+            derivative_gain=np.eye(2),
 
-    torque = controller.update(
-        q_current,
-        q_desired,
-        np.zeros(3)
-    )
-
-    assert np.linalg.norm(torque) > 0.0
+        )
 
 
 # ==========================================================
 # TC-PD-004
-# Pure rate damping
 # ==========================================================
 
-def test_rate_damping():
-
-    controller = QuaternionPD()
+def test_zero_error(controller):
 
     q = np.array([1.0, 0.0, 0.0, 0.0])
 
-    omega = np.array([
-        0.1,
-        -0.2,
-        0.3
-    ])
+    torque = controller.compute(
 
-    torque = controller.update(
         q,
+
         q,
-        omega
+
+        np.zeros(3),
+
     )
 
-    assert np.linalg.norm(torque) > 0.0
+    assert np.allclose(
+
+        torque,
+
+        np.zeros(3),
+
+    )
 
 
 # ==========================================================
 # TC-PD-005
-# Combined attitude and rate error
 # ==========================================================
 
-def test_combined_error():
+def test_attitude_error_generates_torque(controller):
 
-    controller = QuaternionPD()
+    angle = np.deg2rad(10.0)
 
-    angle = np.deg2rad(20.0)
+    q_current = np.array([
 
-    q_current = np.array([1.0, 0.0, 0.0, 0.0])
+        1.0,
+
+        0.0,
+
+        0.0,
+
+        0.0,
+
+    ])
 
     q_desired = np.array([
+
         np.cos(angle / 2),
-        0.0,
+
         np.sin(angle / 2),
-        0.0
+
+        0.0,
+
+        0.0,
+
     ])
 
-    omega = np.array([
-        0.1,
-        0.2,
-        0.3
-    ])
+    torque = controller.compute(
 
-    torque = controller.update(
         q_current,
+
         q_desired,
-        omega
+
+        np.zeros(3),
+
     )
 
     assert np.linalg.norm(torque) > 0.0
@@ -140,155 +162,218 @@ def test_combined_error():
 
 # ==========================================================
 # TC-PD-006
-# Shortest quaternion rotation
 # ==========================================================
 
-def test_shortest_rotation():
+def test_rate_damping(controller):
 
-    controller = QuaternionPD()
+    q = np.array([1.0, 0.0, 0.0, 0.0])
 
-    q_current = np.array([1.0, 0.0, 0.0, 0.0])
+    omega = np.array([
 
-    q_desired = np.array([
-        -1.0,
-        0.0,
-        0.0,
-        0.0
+        0.1,
+
+        -0.2,
+
+        0.3,
+
     ])
 
-    torque = controller.update(
+    torque = controller.compute(
+
+        q,
+
+        q,
+
+        omega,
+
+    )
+
+    assert np.linalg.norm(torque) > 0.0
+
+
+# ==========================================================
+# TC-PD-007
+# ==========================================================
+
+def test_combined_error(controller):
+
+    angle = np.deg2rad(20.0)
+
+    q_current = np.array([
+
+        1.0,
+
+        0.0,
+
+        0.0,
+
+        0.0,
+
+    ])
+
+    q_desired = np.array([
+
+        np.cos(angle / 2),
+
+        0.0,
+
+        np.sin(angle / 2),
+
+        0.0,
+
+    ])
+
+    omega = np.array([
+
+        0.1,
+
+        0.2,
+
+        0.3,
+
+    ])
+
+    torque = controller.compute(
+
         q_current,
+
         q_desired,
-        np.zeros(3)
+
+        omega,
+
+    )
+
+    assert np.linalg.norm(torque) > 0.0
+
+
+# ==========================================================
+# TC-PD-008
+# ==========================================================
+
+def test_shortest_rotation(controller):
+
+    torque = controller.compute(
+
+        np.array([1.0, 0.0, 0.0, 0.0]),
+
+        np.array([-1.0, 0.0, 0.0, 0.0]),
+
+        np.zeros(3),
+
     )
 
     assert np.all(np.isfinite(torque))
 
 
 # ==========================================================
-# TC-PD-007
-# Invalid quaternion dimension
-# ==========================================================
-
-def test_invalid_quaternion_dimension():
-
-    controller = QuaternionPD()
-
-    with pytest.raises(ValueError):
-
-        controller.update(
-            np.array([1.0, 0.0, 0.0]),
-            np.array([1.0, 0.0, 0.0, 0.0]),
-            np.zeros(3)
-        )
-
-
-# ==========================================================
-# TC-PD-008
-# Invalid body-rate dimension
-# ==========================================================
-
-def test_invalid_rate_dimension():
-
-    controller = QuaternionPD()
-
-    with pytest.raises(ValueError):
-
-        controller.update(
-            np.array([1.0, 0.0, 0.0, 0.0]),
-            np.array([1.0, 0.0, 0.0, 0.0]),
-            np.array([0.0, 0.0])
-        )
-
-
-# ==========================================================
 # TC-PD-009
-# NaN quaternion
 # ==========================================================
 
-def test_nan_quaternion():
-
-    controller = QuaternionPD()
+def test_invalid_quaternion_dimension(controller):
 
     with pytest.raises(ValueError):
 
-        controller.update(
-            np.array([np.nan, 0.0, 0.0, 0.0]),
+        controller.compute(
+
+            np.array([1.0, 0.0, 0.0]),
+
             np.array([1.0, 0.0, 0.0, 0.0]),
-            np.zeros(3)
+
+            np.zeros(3),
+
         )
 
 
 # ==========================================================
 # TC-PD-010
-# Zero quaternion
 # ==========================================================
 
-def test_zero_quaternion():
-
-    controller = QuaternionPD()
+def test_invalid_rate_dimension(controller):
 
     with pytest.raises(ValueError):
 
-        controller.update(
-            np.zeros(4),
+        controller.compute(
+
             np.array([1.0, 0.0, 0.0, 0.0]),
-            np.zeros(3)
+
+            np.array([1.0, 0.0, 0.0, 0.0]),
+
+            np.array([0.0, 0.0]),
+
         )
 
 
 # ==========================================================
 # TC-PD-011
-# Reset controller
 # ==========================================================
 
-def test_reset():
+def test_nan_quaternion(controller):
 
-    controller = QuaternionPD()
+    with pytest.raises(ValueError):
 
-    angle = np.deg2rad(20.0)
+        controller.compute(
 
-    controller.update(
+            np.array([np.nan, 0.0, 0.0, 0.0]),
 
-        np.array([1.0, 0.0, 0.0, 0.0]),
+            np.array([1.0, 0.0, 0.0, 0.0]),
 
-        np.array([
-            np.cos(angle / 2),
-            np.sin(angle / 2),
-            0.0,
-            0.0
-        ]),
+            np.zeros(3),
 
-        np.array([
-            0.1,
-            0.2,
-            0.3
-        ])
-    )
-
-    controller.reset()
-
-    assert np.allclose(controller.commanded_torque, np.zeros(3))
-    assert np.allclose(controller.attitude_error, np.zeros(3))
-    assert np.allclose(controller.rate_error, np.zeros(3))
+        )
 
 
 # ==========================================================
 # TC-PD-012
-# Output dimension
 # ==========================================================
 
-def test_output_dimension():
+def test_zero_quaternion(controller):
 
-    controller = QuaternionPD()
+    with pytest.raises(ValueError):
 
-    torque = controller.update(
+        controller.compute(
+
+            np.zeros(4),
+
+            np.array([1.0, 0.0, 0.0, 0.0]),
+
+            np.zeros(3),
+
+        )
+
+
+# ==========================================================
+# TC-PD-013
+# ==========================================================
+
+def test_output_dimension(controller):
+
+    torque = controller.compute(
 
         np.array([1.0, 0.0, 0.0, 0.0]),
 
         np.array([1.0, 0.0, 0.0, 0.0]),
 
-        np.zeros(3)
+        np.zeros(3),
+
     )
 
     assert torque.shape == (3,)
+
+
+# ==========================================================
+# TC-PD-014
+# ==========================================================
+
+def test_output_is_finite(controller):
+
+    torque = controller.compute(
+
+        np.array([1.0, 0.0, 0.0, 0.0]),
+
+        np.array([1.0, 0.0, 0.0, 0.0]),
+
+        np.zeros(3),
+
+    )
+
+    assert np.all(np.isfinite(torque))
