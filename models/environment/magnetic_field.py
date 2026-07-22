@@ -3,15 +3,28 @@ models/environment/magnetic_field.py
 
 Earth Magnetic Field Model
 
-Computes the Earth's magnetic field at the spacecraft location and
-expresses it in the spacecraft body frame.
+Computes the Earth's magnetic field using a centered dipole
+approximation.
 
-The magnetic field model is independent of the spacecraft dynamics,
-actuators, and controllers.
+The model is completely independent of:
+
+- Spacecraft
+- Sensors
+- Actuators
+- Controllers
+- Simulation scenarios
+
+Input
+-----
+Spacecraft position expressed in the ECI frame.
+
+Output
+------
+Earth magnetic field expressed in the ECI frame.
 
 Current Model
 -------------
-- Centered dipole approximation
+- Centered Dipole Approximation
 
 Future Models
 -------------
@@ -21,25 +34,34 @@ Future Models
 
 import numpy as np
 
-from config import EARTH_MAGNETIC_DIPOLE_MOMENT
-
 
 class MagneticField:
     """
     Earth's Magnetic Field Model.
 
-    Notes
-    -----
-    Computes the Earth's magnetic field using a centered dipole model.
-    The returned magnetic field is expressed in the spacecraft body frame.
+    Parameters
+    ----------
+    magnetic_dipole_moment : ndarray (3,)
+        Earth's magnetic dipole moment expressed in the
+        Earth-Centered Inertial (ECI) frame.
     """
 
-    def __init__(self):
-        """Initialize magnetic field model."""
+    def __init__(
+        self,
+        magnetic_dipole_moment: np.ndarray,
+    ):
 
-        self.earth_magnetic_dipole_moment = (
-            EARTH_MAGNETIC_DIPOLE_MOMENT
+        magnetic_dipole_moment = np.asarray(
+            magnetic_dipole_moment,
+            dtype=float,
         )
+
+        if magnetic_dipole_moment.shape != (3,):
+            raise ValueError(
+                "magnetic_dipole_moment must have shape (3,)."
+            )
+
+        self.magnetic_dipole_moment = magnetic_dipole_moment
 
     # ==========================================================
     # Magnetic Field
@@ -47,42 +69,28 @@ class MagneticField:
 
     def compute(
         self,
-        body_to_eci_dcm: np.ndarray,
         spacecraft_position_eci: np.ndarray,
     ) -> np.ndarray:
         """
-        Compute Earth's magnetic field.
+        Compute Earth's magnetic field using the centered
+        dipole approximation.
 
         Parameters
         ----------
-        body_to_eci_dcm : ndarray (3,3)
-            Direction Cosine Matrix transforming vectors from the
-            body frame to the ECI frame.
-
         spacecraft_position_eci : ndarray (3,)
             Spacecraft position expressed in the ECI frame [m].
 
         Returns
         -------
-        magnetic_field_body : ndarray (3,)
-            Earth's magnetic field expressed in the spacecraft
-            body frame [Tesla].
+        magnetic_field_eci : ndarray (3,)
+            Earth's magnetic field expressed in the
+            ECI frame [Tesla].
         """
-
-        body_to_eci_dcm = np.asarray(
-            body_to_eci_dcm,
-            dtype=float,
-        )
 
         spacecraft_position_eci = np.asarray(
             spacecraft_position_eci,
             dtype=float,
         )
-
-        if body_to_eci_dcm.shape != (3, 3):
-            raise ValueError(
-                "body_to_eci_dcm must be a 3×3 matrix."
-            )
 
         if spacecraft_position_eci.shape != (3,):
             raise ValueError(
@@ -95,42 +103,33 @@ class MagneticField:
 
         if orbit_radius <= 0.0:
             raise ValueError(
-                "Spacecraft position cannot be zero."
+                "Spacecraft position magnitude must be greater than zero."
             )
 
         # ------------------------------------------------------
-        # Unit radial direction
+        # Unit radial vector
         # ------------------------------------------------------
 
-        radial_unit_vector_eci = (
-            spacecraft_position_eci / orbit_radius
+        radial_unit_vector = (
+            spacecraft_position_eci /
+            orbit_radius
         )
 
         # ------------------------------------------------------
-        # Centered Dipole Magnetic Field (ECI)
+        # Centered Dipole Magnetic Field
         # ------------------------------------------------------
 
         magnetic_field_eci = (
-            self.earth_magnetic_dipole_moment
-            / orbit_radius**3
+            self.magnetic_dipole_moment /
+            orbit_radius**3
         ) * (
             3.0
             * np.dot(
-                self.earth_magnetic_dipole_moment,
-                radial_unit_vector_eci,
+                self.magnetic_dipole_moment,
+                radial_unit_vector,
             )
-            * radial_unit_vector_eci
-            - self.earth_magnetic_dipole_moment
+            * radial_unit_vector
+            - self.magnetic_dipole_moment
         )
 
-        # ------------------------------------------------------
-        # Transform to Body Frame
-        # ------------------------------------------------------
-
-        eci_to_body_dcm = body_to_eci_dcm.T
-
-        magnetic_field_body = (
-            eci_to_body_dcm @ magnetic_field_eci
-        )
-
-        return magnetic_field_body
+        return magnetic_field_eci

@@ -1,20 +1,33 @@
 """
 models/disturbances/solar_radiation_pressure.py
 
-Solar Radiation Pressure (SRP) Disturbance Model
+Solar Radiation Pressure Force Model
 
-Computes the disturbance torque acting on the spacecraft due to
-solar radiation pressure using a simplified constant-pressure model.
+Computes the solar radiation pressure force acting on the spacecraft.
+
+This model is independent of:
+
+- Orbit propagation
+- Spacecraft attitude
+- Controllers
+- Sensors
+- Actuators
 
 Current Model
 -------------
 - Constant solar radiation pressure at 1 AU
 - Constant reflectivity coefficient
 - Constant illuminated area
-- Constant center of pressure
-- Fixed Sun direction in ECI
+- Fixed Sun direction
 - No eclipse modelling
-- No articulated solar arrays
+
+Future Models
+-------------
+- Eclipse model
+- Variable solar flux
+- Surface optical properties
+- Self-shadowing
+- Articulated solar arrays
 
 References
 ----------
@@ -27,7 +40,22 @@ import numpy as np
 
 class SolarRadiationPressure:
     """
-    Solar Radiation Pressure disturbance model.
+    Solar Radiation Pressure (SRP) force model.
+
+    Parameters
+    ----------
+    solar_radiation_pressure : float
+        Solar radiation pressure at 1 AU [N/m²].
+
+    reflectivity_coefficient : float
+        Surface reflectivity coefficient.
+
+    reference_area : float
+        Effective illuminated area [m²].
+
+    sun_direction_eci : ndarray (3,)
+        Unit vector pointing from Earth toward the Sun
+        expressed in the ECI frame.
     """
 
     def __init__(
@@ -35,30 +63,8 @@ class SolarRadiationPressure:
         solar_radiation_pressure: float,
         reflectivity_coefficient: float,
         reference_area: float,
-        center_of_pressure: np.ndarray,
         sun_direction_eci: np.ndarray,
     ):
-        """
-        Initialize the SRP disturbance model.
-
-        Parameters
-        ----------
-        solar_radiation_pressure : float
-            Solar radiation pressure at 1 AU [N/m²].
-
-        reflectivity_coefficient : float
-            Surface reflectivity coefficient.
-
-        reference_area : float
-            Effective illuminated area [m²].
-
-        center_of_pressure : ndarray (3,)
-            Center of pressure expressed in the spacecraft body frame [m].
-
-        sun_direction_eci : ndarray (3,)
-            Unit vector pointing from Earth toward the Sun
-            expressed in the ECI frame.
-        """
 
         if solar_radiation_pressure <= 0.0:
             raise ValueError(
@@ -75,13 +81,16 @@ class SolarRadiationPressure:
                 "reference_area must be positive."
             )
 
-        self.solar_radiation_pressure = solar_radiation_pressure
-        self.reflectivity_coefficient = reflectivity_coefficient
-        self.reference_area = reference_area
+        self.solar_radiation_pressure = float(
+            solar_radiation_pressure
+        )
 
-        self.center_of_pressure = np.asarray(
-            center_of_pressure,
-            dtype=float,
+        self.reflectivity_coefficient = float(
+            reflectivity_coefficient
+        )
+
+        self.reference_area = float(
+            reference_area
         )
 
         self.sun_direction_eci = np.asarray(
@@ -89,17 +98,14 @@ class SolarRadiationPressure:
             dtype=float,
         )
 
-        if self.center_of_pressure.shape != (3,):
-            raise ValueError(
-                "center_of_pressure must have shape (3,)."
-            )
-
         if self.sun_direction_eci.shape != (3,):
             raise ValueError(
                 "sun_direction_eci must have shape (3,)."
             )
 
-        norm = np.linalg.norm(self.sun_direction_eci)
+        norm = np.linalg.norm(
+            self.sun_direction_eci
+        )
 
         if norm < 1e-12:
             raise ValueError(
@@ -112,75 +118,33 @@ class SolarRadiationPressure:
     # Solar Radiation Force
     # ==========================================================
 
-    def _compute_solar_force(self) -> np.ndarray:
+    def compute(self) -> np.ndarray:
         """
-        Compute the solar radiation force in the ECI frame.
+        Compute the solar radiation pressure force.
 
         Returns
         -------
         solar_force_eci : ndarray (3,)
-            Solar radiation force expressed in the ECI frame [N].
+            Solar radiation pressure force expressed
+            in the ECI frame [N].
         """
 
         force_magnitude = (
+
             self.solar_radiation_pressure
+
             * self.reflectivity_coefficient
+
             * self.reference_area
+
         )
 
         solar_force_eci = (
+
             -force_magnitude
+
             * self.sun_direction_eci
+
         )
 
         return solar_force_eci
-
-    # ==========================================================
-    # Solar Radiation Pressure Torque
-    # ==========================================================
-
-    def compute(
-        self,
-        body_to_eci_dcm: np.ndarray,
-    ) -> np.ndarray:
-        """
-        Compute the solar radiation pressure disturbance torque.
-
-        Parameters
-        ----------
-        body_to_eci_dcm : ndarray (3,3)
-            Direction Cosine Matrix transforming vectors
-            from the body frame to the ECI frame.
-
-        Returns
-        -------
-        solar_radiation_pressure_torque : ndarray (3,)
-            Solar radiation pressure disturbance torque
-            expressed in the spacecraft body frame [N·m].
-        """
-
-        body_to_eci_dcm = np.asarray(
-            body_to_eci_dcm,
-            dtype=float,
-        )
-
-        if body_to_eci_dcm.shape != (3, 3):
-            raise ValueError(
-                "body_to_eci_dcm must have shape (3,3)."
-            )
-
-        solar_force_eci = self._compute_solar_force()
-
-        eci_to_body_dcm = body_to_eci_dcm.T
-
-        solar_force_body = (
-            eci_to_body_dcm
-            @ solar_force_eci
-        )
-
-        solar_radiation_pressure_torque = np.cross(
-            self.center_of_pressure,
-            solar_force_body,
-        )
-
-        return solar_radiation_pressure_torque

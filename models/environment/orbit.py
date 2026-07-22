@@ -1,128 +1,185 @@
 """
 models/environment/orbit.py
 
-Circular orbit propagator for a 600 km Sun-Synchronous Earth Observation
-satellite.
+Two-body circular orbit propagator.
 
-This module is responsible only for orbital motion. It propagates the
-spacecraft position and velocity in the Earth-Centered Inertial (ECI)
-frame using a simple circular orbit assumption.
+This module computes the spacecraft position and velocity in the
+Earth-Centered Inertial (ECI) frame for a circular orbit.
 
-State
------
-position : ndarray (3,)
-    Spacecraft position in ECI frame [m]
+The model is completely independent of:
 
-velocity : ndarray (3,)
-    Spacecraft velocity in ECI frame [m/s]
+- Simulation
+- Spacecraft
+- Controllers
+- Sensors
+- Actuators
 
-Public Methods
---------------
-update(t)
-    Propagate the orbit to time t.
+Current Model
+-------------
+- Circular Orbit
+- Two-body dynamics
 
-reset()
-    Reset the orbit to the initial state.
+Future Models
+-------------
+- Keplerian orbit propagation
+- J2 perturbation
+- SGP4
+- Numerical propagator
 """
 
 import numpy as np
 
-from config import (
-    ALTITUDE_KM,
-    R_EARTH,
-    n,
-)
-
 
 class Orbit:
     """
-    Circular Sun-Synchronous orbit model.
+    Circular orbit propagator.
 
-    Notes
-    -----
-    Assumptions
-    -----------
-    - Circular orbit
-    - Constant altitude
-    - Constant mean motion
-    - Two-body dynamics
-    - ECI reference frame
+    Parameters
+    ----------
+    mu : float
+        Gravitational parameter [m³/s²].
+
+    semi_major_axis : float
+        Orbit semi-major axis [m].
+
+    eccentricity : float
+        Orbital eccentricity.
+
+    inclination : float
+        Inclination [rad].
+
+    raan : float
+        Right Ascension of Ascending Node [rad].
+
+    argument_of_perigee : float
+        Argument of perigee [rad].
+
+    true_anomaly : float
+        Initial true anomaly [rad].
     """
 
-    def __init__(self):
-        """Initialize orbital parameters."""
+    def __init__(
+        self,
+        mu: float,
+        semi_major_axis: float,
+        eccentricity: float = 0.0,
+        inclination: float = 0.0,
+        raan: float = 0.0,
+        argument_of_perigee: float = 0.0,
+        true_anomaly: float = 0.0,
+    ):
 
-        # Orbital parameters
-        self.altitude = ALTITUDE_KM * 1000.0          # [m]
-        self.semi_major_axis = R_EARTH + self.altitude
-        self.radius = self.semi_major_axis
+        if mu <= 0.0:
+            raise ValueError("mu must be positive.")
 
-        self.mean_motion = n                          # [rad/s]
-        self.period = 2.0 * np.pi / self.mean_motion
+        if semi_major_axis <= 0.0:
+            raise ValueError(
+                "semi_major_axis must be positive."
+            )
 
-        # Orbital elements (reserved for future expansion)
-        self.eccentricity = 0.0
-        self.inclination = np.deg2rad(98.0)
-        self.raan = 0.0
-        self.argument_of_perigee = 0.0
-        self.true_anomaly = 0.0
+        if not (0.0 <= eccentricity < 1.0):
+            raise ValueError(
+                "eccentricity must satisfy 0 ≤ e < 1."
+            )
 
-        # Time
-        self.time = 0.0
+        self.mu = float(mu)
 
-        # State vectors
-        self.position = np.zeros(3)
-        self.velocity = np.zeros(3)
+        self.semi_major_axis = float(
+            semi_major_axis
+        )
 
-        # Initialize orbit
-        self.update(0.0)
+        self.eccentricity = float(
+            eccentricity
+        )
 
-    # ==========================================================
+        self.inclination = float(
+            inclination
+        )
+
+        self.raan = float(
+            raan
+        )
+
+        self.argument_of_perigee = float(
+            argument_of_perigee
+        )
+
+        self.initial_true_anomaly = float(
+            true_anomaly
+        )
+
+        # Circular orbit mean motion
+        self.mean_motion = np.sqrt(
+            self.mu / self.semi_major_axis**3
+        )
+
+        self.period = (
+            2.0 * np.pi / self.mean_motion
+        )
+
+    # ======================================================
     # Orbit Propagation
-    # ==========================================================
+    # ======================================================
 
-    def update(self, t: float) -> None:
+    def propagate(
+        self,
+        time: float,
+    ):
         """
-        Propagate the orbit to time t.
+        Propagate the orbit.
 
         Parameters
         ----------
-        t : float
-            Simulation time [s]
+        time : float
+            Simulation time [s].
+
+        Returns
+        -------
+        position_eci : ndarray (3,)
+            Position in ECI frame [m].
+
+        velocity_eci : ndarray (3,)
+            Velocity in ECI frame [m/s].
         """
 
-        self.time = t
+        if not np.isscalar(time):
+            raise TypeError(
+                "time must be a scalar."
+            )
 
-        # True anomaly (circular orbit)
-        theta = self.mean_motion * t
-        self.true_anomaly = theta
+        if time < 0.0:
+            raise ValueError(
+                "time must be non-negative."
+            )
+
+        theta = (
+            self.initial_true_anomaly
+            + self.mean_motion * time
+        )
 
         r = self.semi_major_axis
 
-        # Position in ECI frame
-        self.position = r * np.array([
-            np.cos(theta),
-            np.sin(theta),
-            0.0,
-        ])
-
-        # Velocity in ECI frame
-        self.velocity = (
-            r * self.mean_motion *
-            np.array([
-                -np.sin(theta),
+        position_eci = r * np.array(
+            [
                 np.cos(theta),
+                np.sin(theta),
                 0.0,
-            ])
+            ]
         )
 
-        self.radius = np.linalg.norm(self.position)
+        velocity_eci = (
+            r
+            * self.mean_motion
+            * np.array(
+                [
+                    -np.sin(theta),
+                    np.cos(theta),
+                    0.0,
+                ]
+            )
+        )
 
-    # ==========================================================
-    # Utility Functions
-    # ==========================================================
-
-    def reset(self) -> None:
-        """Reset the orbit to the initial state."""
-
-        self.update(0.0)
+        return (
+            position_eci,
+            velocity_eci,
+        )
