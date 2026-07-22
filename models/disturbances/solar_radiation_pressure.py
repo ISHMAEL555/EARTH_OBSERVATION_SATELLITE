@@ -5,20 +5,12 @@ Solar Radiation Pressure Force Model
 
 Computes the solar radiation pressure force acting on the spacecraft.
 
-This model is independent of:
-
-- Orbit propagation
-- Spacecraft attitude
-- Controllers
-- Sensors
-- Actuators
-
 Current Model
 -------------
 - Constant solar radiation pressure at 1 AU
 - Constant reflectivity coefficient
 - Constant illuminated area
-- Fixed Sun direction
+- Sun direction provided by DisturbanceState
 - No eclipse modelling
 
 Future Models
@@ -37,25 +29,12 @@ References
 
 import numpy as np
 
+from models.disturbances.disturbance_state import DisturbanceState
+
 
 class SolarRadiationPressure:
     """
     Solar Radiation Pressure (SRP) force model.
-
-    Parameters
-    ----------
-    solar_radiation_pressure : float
-        Solar radiation pressure at 1 AU [N/m²].
-
-    reflectivity_coefficient : float
-        Surface reflectivity coefficient.
-
-    reference_area : float
-        Effective illuminated area [m²].
-
-    sun_direction_eci : ndarray (3,)
-        Unit vector pointing from Earth toward the Sun
-        expressed in the ECI frame.
     """
 
     def __init__(
@@ -63,7 +42,6 @@ class SolarRadiationPressure:
         solar_radiation_pressure: float,
         reflectivity_coefficient: float,
         reference_area: float,
-        sun_direction_eci: np.ndarray,
     ):
 
         if solar_radiation_pressure <= 0.0:
@@ -93,41 +71,45 @@ class SolarRadiationPressure:
             reference_area
         )
 
-        self.sun_direction_eci = np.asarray(
-            sun_direction_eci,
-            dtype=float,
-        )
-
-        if self.sun_direction_eci.shape != (3,):
-            raise ValueError(
-                "sun_direction_eci must have shape (3,)."
-            )
-
-        norm = np.linalg.norm(
-            self.sun_direction_eci
-        )
-
-        if norm < 1e-12:
-            raise ValueError(
-                "sun_direction_eci cannot be the zero vector."
-            )
-
-        self.sun_direction_eci /= norm
-
     # ==========================================================
-    # Solar Radiation Force
+    # Solar Radiation Pressure Force
     # ==========================================================
 
-    def compute(self) -> np.ndarray:
+    def compute(
+        self,
+        state: DisturbanceState,
+    ) -> np.ndarray:
         """
         Compute the solar radiation pressure force.
 
+        Parameters
+        ----------
+        state : DisturbanceState
+            Current spacecraft/environment state.
+
         Returns
         -------
-        solar_force_eci : ndarray (3,)
+        ndarray (3,)
             Solar radiation pressure force expressed
             in the ECI frame [N].
         """
+
+        sun_direction_eci = np.asarray(
+            state.solar_vector_eci,
+            dtype=float,
+        )
+
+        if sun_direction_eci.shape != (3,):
+            raise ValueError(
+                "solar_vector_eci must have shape (3,)."
+            )
+
+        norm = np.linalg.norm(sun_direction_eci)
+
+        if norm < 1e-12:
+            return np.zeros(3)
+
+        sun_direction_eci /= norm
 
         force_magnitude = (
 
@@ -143,7 +125,7 @@ class SolarRadiationPressure:
 
             -force_magnitude
 
-            * self.sun_direction_eci
+            * sun_direction_eci
 
         )
 

@@ -94,47 +94,59 @@ def update_sun(scenario):
 # ==========================================================
 
 def update_disturbances(scenario):
+    """
+    Update all disturbance models.
+    """
+
+    position_eci = scenario.position_eci
+
+    orbit_radius = np.linalg.norm(position_eci)
+
+    if orbit_radius < 1e-12:
+        raise RuntimeError(
+            "Invalid orbit radius."
+        )
+
+    radial_unit_vector_eci = (
+        position_eci
+        / orbit_radius
+    )
 
     disturbance_state = DisturbanceState(
 
         time=scenario.simulator.time,
 
-        position_eci=scenario.position_eci,
-
+        # Orbit
+        position_eci=position_eci,
         velocity_eci=scenario.velocity_eci,
 
-        body_to_eci_dcm=
+        orbit_radius=orbit_radius,
+        radial_unit_vector_eci=radial_unit_vector_eci,
 
+        # Spacecraft
+        body_to_eci_dcm=
             scenario.sim.spacecraft.body_to_eci_dcm(),
 
         inertia_matrix=
-
             scenario.sim.spacecraft.inertia,
 
+        # Environment
         magnetic_field_eci=
-
             scenario.magnetic_field_eci,
 
         magnetic_field_body=
-
             scenario.magnetic_field_body,
 
         atmospheric_density=
-
             scenario.atmospheric_density,
 
         solar_vector_eci=
-
             scenario.sun_vector_eci,
 
     )
 
     scenario.disturbance_torque = (
-
         scenario.sim.disturbances.compute(
-
             disturbance_state
-
         )
-
     )

@@ -154,7 +154,7 @@ class Builder:
 
         )
 
-    # ==========================================================
+        # ==========================================================
     # Disturbances
     # ==========================================================
 
@@ -164,15 +164,23 @@ class Builder:
 
         cfg = self.mission["disturbances"]
 
+        # ------------------------------------------------------
+        # Gravity Gradient
+        # ------------------------------------------------------
+
         disturbances.add(
 
             GravityGradient(
 
-                cfg["gravity_gradient"]["mu"]
+                gravitational_parameter=cfg["gravity_gradient"]["mu"]
 
             )
 
         )
+
+        # ------------------------------------------------------
+        # Atmospheric Drag
+        # ------------------------------------------------------
 
         disturbances.add(
 
@@ -186,6 +194,10 @@ class Builder:
 
         )
 
+        # ------------------------------------------------------
+        # Solar Radiation Pressure
+        # ------------------------------------------------------
+
         disturbances.add(
 
             SolarRadiationPressure(
@@ -196,18 +208,12 @@ class Builder:
 
                 reference_area=cfg["srp"]["area"],
 
-                sun_direction_eci=np.asarray(
-
-                    cfg["srp"]["sun_direction"]
-
-                ),
-
             )
 
         )
 
         return disturbances
-
+    
     # ==========================================================
     # Actuators
     # ==========================================================

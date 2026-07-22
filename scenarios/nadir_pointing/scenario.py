@@ -4,9 +4,7 @@ scenarios/nadir_pointing/scenario.py
 Nadir Pointing Mission Scenario
 
 This module orchestrates the execution of a nadir-pointing
-Earth observation mission. The implementation follows a
-modular architecture where each subsystem is delegated to
-its corresponding module.
+Earth observation mission.
 
 Mission Flow
 ------------
@@ -43,7 +41,6 @@ class NadirPointingScenario:
         simulation,
         simulator,
         guidance,
-        logger,
     ):
         """
         Parameters
@@ -56,9 +53,6 @@ class NadirPointingScenario:
 
         guidance : GuidanceLaw
             Mission guidance law.
-
-        logger : Logger
-            Telemetry logger.
         """
 
         self.sim = simulation
@@ -66,8 +60,6 @@ class NadirPointingScenario:
         self.simulator = simulator
 
         self.guidance = guidance
-
-        self.logger = logger
 
         # ==================================================
         # Mission Variables
@@ -85,7 +77,7 @@ class NadirPointingScenario:
 
         self.magnetic_field_body = None
 
-        self.atmospheric_density = None
+        self.atmospheric_density = 0.0
 
         self.sun_vector_eci = None
 
@@ -105,7 +97,11 @@ class NadirPointingScenario:
 
         self.magnetorquer_torque = None
 
-        self.telemetry = None
+        # ==================================================
+        # Telemetry
+        # ==================================================
+
+        self.telemetry = {}
 
     # ======================================================
     # Mission Lifecycle

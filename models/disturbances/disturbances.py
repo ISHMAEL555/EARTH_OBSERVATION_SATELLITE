@@ -1,80 +1,66 @@
 """
 models/disturbances/disturbances.py
 
-Disturbance Manager
-
-Registers and evaluates spacecraft disturbance models.
-
-Each disturbance model is responsible for computing a single physical
-quantity (force or torque). The disturbance manager simply evaluates
-all registered models and returns their contributions.
+Disturbance manager.
 """
 
-from typing import List
+from __future__ import annotations
+
+import numpy as np
+
+from models.disturbances.disturbance_state import DisturbanceState
 
 
 class Disturbances:
     """
-    Disturbance model manager.
+    Collection of disturbance models.
     """
 
     def __init__(self):
-        """Initialize an empty disturbance manager."""
 
-        self._disturbance_models: List[object] = []
+        self._disturbance_models = []
 
-    # ==========================================================
+    # ------------------------------------------------------
     # Registration
-    # ==========================================================
+    # ------------------------------------------------------
 
-    def add(self, disturbance_model):
-        """
-        Register a disturbance model.
+    def add(self, disturbance):
 
-        Parameters
-        ----------
-        disturbance_model : object
-            Object implementing a compute() method.
-        """
+        self._disturbance_models.append(
+            disturbance
+        )
 
-        if not callable(getattr(disturbance_model, "compute", None)):
-            raise TypeError(
-                "Disturbance model must implement a compute() method."
+    # ------------------------------------------------------
+    # Compute Total Disturbance Torque
+    # ------------------------------------------------------
+
+    def compute(
+        self,
+        state: DisturbanceState,
+    ) -> np.ndarray:
+
+        total_torque = np.zeros(3)
+
+        for disturbance in self._disturbance_models:
+
+            contribution = disturbance.compute(
+                state
             )
 
-        self._disturbance_models.append(disturbance_model)
+            if contribution is None:
+                continue
 
-    def remove(self, disturbance_model):
-        """Remove a disturbance model."""
+            contribution = np.asarray(
+                contribution,
+                dtype=float,
+            )
 
-        self._disturbance_models.remove(disturbance_model)
+            if contribution.shape != (3,):
+                raise ValueError(
+                    f"{type(disturbance).__name__} "
+                    "must return a (3,) torque vector."
+                )
 
-    def clear(self):
-        """Remove all disturbance models."""
+            total_torque += contribution
 
-        self._disturbance_models.clear()
-
-    # ==========================================================
-    # Evaluation
-    # ==========================================================
-
-    def compute(self, **kwargs):
-        """
-        Evaluate all registered disturbance models.
-
-        Parameters
-        ----------
-        **kwargs
-            Keyword arguments forwarded to each disturbance model.
-
-        Returns
-        -------
-        disturbances : list
-            List containing the output from each registered
-            disturbance model.
-        """
-
-        return [
-            disturbance.compute(**kwargs)
-            for disturbance in self._disturbance_models
-        ]
+        return total_torque

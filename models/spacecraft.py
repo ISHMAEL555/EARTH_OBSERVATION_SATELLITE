@@ -279,6 +279,79 @@ class Spacecraft:
         self.q = q / norm
         self.omega = omega
 
+
+
+        # ======================================================
+    # Attitude Utilities
+    # ======================================================
+
+    def body_to_eci_dcm(self) -> np.ndarray:
+        """
+        Return the Direction Cosine Matrix (DCM) that rotates
+        vectors from the body frame to the ECI frame.
+
+        Returns
+        -------
+        ndarray (3,3)
+            Body-to-ECI rotation matrix.
+        """
+
+        q0, q1, q2, q3 = self.q
+
+        return np.array([
+
+            [
+                1.0 - 2.0 * (q2**2 + q3**2),
+                2.0 * (q1*q2 - q0*q3),
+                2.0 * (q1*q3 + q0*q2),
+            ],
+
+            [
+                2.0 * (q1*q2 + q0*q3),
+                1.0 - 2.0 * (q1**2 + q3**2),
+                2.0 * (q2*q3 - q0*q1),
+            ],
+
+            [
+                2.0 * (q1*q3 - q0*q2),
+                2.0 * (q2*q3 + q0*q1),
+                1.0 - 2.0 * (q1**2 + q2**2),
+            ],
+
+        ])
+
+
+    def eci_to_body_dcm(self) -> np.ndarray:
+        """
+        Return the Direction Cosine Matrix (DCM) that rotates
+        vectors from the ECI frame to the body frame.
+
+        Returns
+        -------
+        ndarray (3,3)
+            ECI-to-body rotation matrix.
+        """
+
+        return self.body_to_eci_dcm().T
+
+
+    @property
+    def quaternion(self) -> np.ndarray:
+        """
+        Current spacecraft attitude quaternion.
+        """
+
+        return self.q.copy()
+
+
+    @property
+    def angular_velocity(self) -> np.ndarray:
+        """
+        Current spacecraft body angular velocity.
+        """
+
+        return self.omega.copy()
+    
     def reset(self) -> None:
         """
         Reset spacecraft state.

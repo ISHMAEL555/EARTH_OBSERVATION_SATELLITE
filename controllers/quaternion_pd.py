@@ -1,24 +1,11 @@
 """
 controllers/quaternion_pd.py
 
-Quaternion Proportional-Derivative (PD) Attitude Controller
+Quaternion Proportional-Derivative Tracking Controller
 
-Computes the commanded spacecraft body torque using quaternion
-feedback and body-rate damping.
+Implements
 
-Current Model
--------------
-- Quaternion feedback
-- Body-rate damping
-- Full-state feedback
-- Memoryless controller
-
-Future Models
--------------
-- Integral action
-- Gain scheduling
-- Feedforward compensation
-- Adaptive control
+    τ = -Kp qe - Kd (ω - ωref)
 
 References
 ----------
@@ -31,15 +18,7 @@ import numpy as np
 
 class QuaternionPD:
     """
-    Quaternion Proportional-Derivative controller.
-
-    Parameters
-    ----------
-    proportional_gain : ndarray (3,3)
-        Proportional gain matrix.
-
-    derivative_gain : ndarray (3,3)
-        Derivative gain matrix.
+    Quaternion PD attitude tracking controller.
     """
 
     def __init__(
@@ -58,15 +37,16 @@ class QuaternionPD:
             "derivative_gain",
         )
 
-    # ==========================================================
+    # ======================================================
     # Public Interface
-    # ==========================================================
+    # ======================================================
 
     def compute(
         self,
         current_quaternion: np.ndarray,
         desired_quaternion: np.ndarray,
         body_rates: np.ndarray,
+        desired_body_rates: np.ndarray | None = None,
     ) -> np.ndarray:
         """
         Compute commanded body torque.
@@ -74,18 +54,14 @@ class QuaternionPD:
         Parameters
         ----------
         current_quaternion : ndarray (4,)
-            Current spacecraft attitude quaternion.
-
         desired_quaternion : ndarray (4,)
-            Desired spacecraft attitude quaternion.
-
         body_rates : ndarray (3,)
-            Current spacecraft body rates [rad/s].
+        desired_body_rates : ndarray (3,), optional
 
         Returns
         -------
         ndarray (3,)
-            Commanded body torque [N·m].
+            Commanded body torque.
         """
 
         current_quaternion = self._validate_quaternion(
@@ -101,36 +77,58 @@ class QuaternionPD:
             "body_rates",
         )
 
+        if desired_body_rates is None:
+
+            desired_body_rates = np.zeros(3)
+
+        desired_body_rates = self._validate_vector(
+            desired_body_rates,
+            "desired_body_rates",
+        )
+
+        # ---------------------------------------------
+        # Quaternion Error
+        # ---------------------------------------------
+
         q_error = self._quaternion_error(
             current_quaternion,
             desired_quaternion,
         )
 
-        # Shortest rotation
         if q_error[0] < 0.0:
             q_error = -q_error
 
         attitude_error = q_error[1:]
 
-        torque = (
+        # ---------------------------------------------
+        # Angular Velocity Error
+        # ---------------------------------------------
+
+        rate_error = (
+            body_rates
+            - desired_body_rates
+        )
+
+        # ---------------------------------------------
+        # PD Tracking Law
+        # ---------------------------------------------
+
+        commanded_torque = (
 
             -self.Kp @ attitude_error
 
-            -self.Kd @ body_rates
+            -self.Kd @ rate_error
 
         )
 
-        return torque
+        return commanded_torque
 
-    # ==========================================================
+    # ======================================================
     # Quaternion Utilities
-    # ==========================================================
+    # ======================================================
 
     @staticmethod
-    def _quaternion_error(
-        current,
-        desired,
-    ):
+    def _quaternion_error(current, desired):
 
         return QuaternionPD._quat_multiply(
 
@@ -149,7 +147,8 @@ class QuaternionPD:
                 -q[1],
                 -q[2],
                 -q[3],
-            ]
+            ],
+            dtype=float,
         )
 
     @staticmethod
@@ -159,30 +158,23 @@ class QuaternionPD:
         w2, x2, y2, z2 = q2
 
         return np.array(
-
             [
                 w1*w2 - x1*x2 - y1*y2 - z1*z2,
                 w1*x2 + x1*w2 + y1*z2 - z1*y2,
                 w1*y2 - x1*z2 + y1*w2 + z1*x2,
                 w1*z2 + x1*y2 - y1*x2 + z1*w2,
-            ]
-
-        )
-
-    # ==========================================================
-    # Validation
-    # ==========================================================
-
-    @staticmethod
-    def _validate_gain(
-        gain,
-        name,
-    ):
-
-        gain = np.asarray(
-            gain,
+            ],
             dtype=float,
         )
+
+    # ======================================================
+    # Validation
+    # ======================================================
+
+    @staticmethod
+    def _validate_gain(gain, name):
+
+        gain = np.asarray(gain, dtype=float)
 
         if gain.shape != (3, 3):
             raise ValueError(
@@ -197,15 +189,9 @@ class QuaternionPD:
         return gain
 
     @staticmethod
-    def _validate_vector(
-        vector,
-        name,
-    ):
+    def _validate_vector(vector, name):
 
-        vector = np.asarray(
-            vector,
-            dtype=float,
-        )
+        vector = np.asarray(vector, dtype=float)
 
         if vector.shape != (3,):
             raise ValueError(
@@ -222,10 +208,7 @@ class QuaternionPD:
     @staticmethod
     def _validate_quaternion(q):
 
-        q = np.asarray(
-            q,
-            dtype=float,
-        )
+        q = np.asarray(q, dtype=float)
 
         if q.shape != (4,):
             raise ValueError(
@@ -241,7 +224,7 @@ class QuaternionPD:
 
         if norm < 1e-12:
             raise ValueError(
-                "Quaternion magnitude cannot be zero."
+                "Quaternion norm cannot be zero."
             )
 
         return q / norm

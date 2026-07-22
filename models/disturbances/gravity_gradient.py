@@ -27,15 +27,12 @@ References
 
 import numpy as np
 
+from models.disturbances.disturbance_state import DisturbanceState
+
 
 class GravityGradient:
     """
     Gravity-gradient disturbance torque model.
-
-    Parameters
-    ----------
-    gravitational_parameter : float
-        Central body's gravitational parameter [m³/s²].
     """
 
     def __init__(
@@ -58,50 +55,44 @@ class GravityGradient:
 
     def compute(
         self,
-        body_to_eci_dcm: np.ndarray,
-        inertia_matrix: np.ndarray,
-        radial_unit_vector_eci: np.ndarray,
-        orbit_radius: float,
+        state: DisturbanceState,
     ) -> np.ndarray:
         """
-        Compute the gravity-gradient disturbance torque.
+        Compute gravity-gradient disturbance torque.
 
         Parameters
         ----------
-        body_to_eci_dcm : ndarray (3,3)
-            Direction Cosine Matrix transforming vectors from the
-            body frame to the ECI frame.
-
-        inertia_matrix : ndarray (3,3)
-            Spacecraft inertia matrix [kg·m²].
-
-        radial_unit_vector_eci : ndarray (3,)
-            Unit radial vector expressed in the ECI frame.
-
-        orbit_radius : float
-            Distance from the Earth's center [m].
+        state : DisturbanceState
+            Current spacecraft/environment state.
 
         Returns
         -------
-        gravity_gradient_torque : ndarray (3,)
-            Gravity-gradient torque expressed in the
-            spacecraft body frame [N·m].
+        ndarray (3,)
+            Gravity-gradient torque expressed in the body frame.
         """
 
         body_to_eci_dcm = np.asarray(
-            body_to_eci_dcm,
+            state.body_to_eci_dcm,
             dtype=float,
         )
 
         inertia_matrix = np.asarray(
-            inertia_matrix,
+            state.inertia_matrix,
             dtype=float,
         )
 
         radial_unit_vector_eci = np.asarray(
-            radial_unit_vector_eci,
+            state.radial_unit_vector_eci,
             dtype=float,
         )
+
+        orbit_radius = float(
+            state.orbit_radius
+        )
+
+        # ------------------------------------------------------
+        # Validation
+        # ------------------------------------------------------
 
         if body_to_eci_dcm.shape != (3, 3):
             raise ValueError(
@@ -129,10 +120,16 @@ class GravityGradient:
 
         if radial_norm < 1e-12:
             raise ValueError(
-                "radial_unit_vector_eci must be non-zero."
+                "radial_unit_vector_eci cannot be zero."
             )
 
-        radial_unit_vector_eci /= radial_norm
+        radial_unit_vector_eci = (
+            radial_unit_vector_eci / radial_norm
+        )
+
+        # ------------------------------------------------------
+        # Convert radial direction to body frame
+        # ------------------------------------------------------
 
         eci_to_body_dcm = body_to_eci_dcm.T
 
@@ -140,6 +137,10 @@ class GravityGradient:
             eci_to_body_dcm
             @ radial_unit_vector_eci
         )
+
+        # ------------------------------------------------------
+        # Gravity-gradient torque
+        # ------------------------------------------------------
 
         gravity_gradient_torque = (
 
@@ -155,6 +156,7 @@ class GravityGradient:
                 @ radial_unit_vector_body,
 
             )
+
         )
 
         return gravity_gradient_torque

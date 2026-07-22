@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from .telemetry import initialize_telemetry
+
 
 def initialize(scenario) -> None:
     """
@@ -33,13 +35,12 @@ def initialize(scenario) -> None:
 
     initialize_guidance(scenario)
 
-    initialize_logger(scenario)
+    initialize_telemetry_storage(scenario)
 
 
 # ==========================================================
 # Simulator
 # ==========================================================
-
 
 def initialize_simulator(scenario) -> None:
     """
@@ -52,7 +53,6 @@ def initialize_simulator(scenario) -> None:
 # ==========================================================
 # Spacecraft
 # ==========================================================
-
 
 def initialize_spacecraft(scenario) -> None:
     """
@@ -76,7 +76,6 @@ def initialize_spacecraft(scenario) -> None:
 # Actuators
 # ==========================================================
 
-
 def initialize_actuators(scenario) -> None:
     """
     Reset actuator models.
@@ -86,15 +85,34 @@ def initialize_actuators(scenario) -> None:
 
         scenario.sim.reaction_wheels.reset()
 
-    if hasattr(scenario.sim, "magnetorquers"):
+        # Initialize wheel momentum from the model if available
+        if hasattr(scenario.sim.reaction_wheels, "wheel_momentum"):
 
-        pass
+            scenario.wheel_momentum = (
+                scenario.sim.reaction_wheels.wheel_momentum.copy()
+            )
+
+        else:
+
+            # Default for a 4-wheel pyramid
+            scenario.wheel_momentum = np.zeros(4)
+
+    else:
+
+        scenario.wheel_momentum = np.zeros(4)
+
+    scenario.actual_rw_torque = np.zeros(3)
+
+    scenario.rw_body_torque = np.zeros(3)
+
+    scenario.actual_dipole = np.zeros(3)
+
+    scenario.magnetorquer_torque = np.zeros(3)
 
 
 # ==========================================================
 # Environment
 # ==========================================================
-
 
 def initialize_environment(scenario) -> None:
     """
@@ -105,13 +123,16 @@ def initialize_environment(scenario) -> None:
 
     scenario.magnetic_field_body = np.zeros(3)
 
+    scenario.atmospheric_density = 0.0
+
+    scenario.sun_vector_eci = np.zeros(3)
+
     scenario.disturbance_torque = np.zeros(3)
 
 
 # ==========================================================
 # Guidance
 # ==========================================================
-
 
 def initialize_guidance(scenario) -> None:
     """
@@ -127,10 +148,9 @@ def initialize_guidance(scenario) -> None:
 # Telemetry
 # ==========================================================
 
-
-def initialize_logger(scenario) -> None:
+def initialize_telemetry_storage(scenario) -> None:
     """
-    Reset telemetry.
+    Initialize telemetry storage.
     """
 
-    scenario.logger.reset()
+    initialize_telemetry(scenario)
