@@ -18,6 +18,7 @@ from scenarios.nadir_pointing.config import (
 
 from guidance.nadir_pointing import NadirPointingGuidance
 
+from analysis import generate_report
 
 # ==========================================================
 # Builders
@@ -66,8 +67,14 @@ if __name__ == "__main__":
 
     telemetry = main()
 
-    print("Simulation completed successfully.\n")
+    print("\nSimulation completed successfully.")
 
+    print(f"Samples : {len(telemetry['time'])}")
+
+    print(f"Final Time : {telemetry['time'][-1]:.2f} s")
+
+    generate_report(telemetry)
+    
     print(f"Samples : {len(telemetry['time'])}")
 
     print(f"Final Time : {telemetry['time'][-1]:.2f} s")
