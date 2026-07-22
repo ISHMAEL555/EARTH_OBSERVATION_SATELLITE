@@ -7,7 +7,6 @@ Quaternion attitude tracking plots.
 from __future__ import annotations
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 from .common import (
     create_figure,
@@ -17,6 +16,9 @@ from .common import (
 
 from .style import (
     LINE_WIDTH,
+    REFERENCE_LINE_WIDTH,
+    REFERENCE_LINE_STYLE,
+    REFERENCE_ALPHA,
     TITLE_FONT_SIZE,
     LABEL_FONT_SIZE,
     LEGEND_FONT_SIZE,
@@ -27,18 +29,20 @@ from .style import (
 def plot_attitude(
     telemetry: dict,
     output_directory: str = "analysis/figures",
-) -> None:
+):
     """
-    Plot quaternion tracking.
-
-    Parameters
-    ----------
-    telemetry : dict
-        Simulation telemetry dictionary.
-
-    output_directory : str
-        Directory where figures are saved.
+    Plot actual and reference quaternion histories.
     """
+
+    required = [
+        "time",
+        "quaternion",
+        "reference_quaternion",
+    ]
+
+    for key in required:
+        if key not in telemetry:
+            raise KeyError(f"Missing telemetry channel '{key}'")
 
     time = np.asarray(telemetry["time"])
 
@@ -61,27 +65,31 @@ def plot_attitude(
 
     for i in range(4):
 
+        # Actual quaternion
+
         ax.plot(
             time,
             quaternion[:, i],
-            linewidth=LINE_WIDTH,
             color=COLORS[i],
-            label=f"{labels[i]} Actual",
+            linewidth=LINE_WIDTH,
+            label=f"{labels[i]}",
         )
+
+        # Reference quaternion
 
         ax.plot(
             time,
             reference[:, i],
-            "--",
-            linewidth=1.2,
+            linestyle=REFERENCE_LINE_STYLE,
+            linewidth=REFERENCE_LINE_WIDTH,
+            alpha=REFERENCE_ALPHA,
             color=COLORS[i],
-            alpha=0.65,
-            label=f"{labels[i]} Reference",
         )
 
     ax.set_title(
         "Quaternion Attitude Tracking",
         fontsize=TITLE_FONT_SIZE,
+        fontweight="bold",
     )
 
     ax.set_xlabel(
@@ -94,11 +102,17 @@ def plot_attitude(
         fontsize=LABEL_FONT_SIZE,
     )
 
+    ax.set_ylim(
+        -1.05,
+        1.05,
+    )
+
     configure_axes(ax)
 
     ax.legend(
+        ncol=4,
         fontsize=LEGEND_FONT_SIZE,
-        ncol=2,
+        loc="upper center",
     )
 
     save_figure(

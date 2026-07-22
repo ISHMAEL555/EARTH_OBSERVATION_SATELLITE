@@ -1,7 +1,7 @@
 """
 analysis/plotting/orbit.py
 
-3D orbit visualization.
+Professional 3D orbit visualization.
 """
 
 from __future__ import annotations
@@ -9,9 +9,19 @@ from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
 
+from .common import (
+    save_figure,
+    set_equal_axis_3d,
+)
+
 from .style import (
     FIGURE_SIZE,
     TITLE_FONT_SIZE,
+    EARTH_RADIUS,
+    EARTH_COLOR,
+    ORBIT_COLOR,
+    START_COLOR,
+    END_COLOR,
 )
 
 
@@ -20,39 +30,87 @@ def plot_orbit(
     output_directory="analysis/figures",
 ):
     """
-    Plot spacecraft trajectory in ECI.
+    Plot spacecraft trajectory in the Earth-Centered Inertial (ECI) frame.
     """
-
-    from pathlib import Path
 
     position = np.asarray(
         telemetry["position_eci"]
     )
 
-    fig = plt.figure(
-        figsize=FIGURE_SIZE
-    )
+    fig = plt.figure(figsize=FIGURE_SIZE)
 
     ax = fig.add_subplot(
         111,
         projection="3d",
     )
 
+    # ======================================================
+    # Earth
+    # ======================================================
+
+    u = np.linspace(0, 2 * np.pi, 80)
+
+    v = np.linspace(0, np.pi, 40)
+
+    x = EARTH_RADIUS * np.outer(
+        np.cos(u),
+        np.sin(v),
+    )
+
+    y = EARTH_RADIUS * np.outer(
+        np.sin(u),
+        np.sin(v),
+    )
+
+    z = EARTH_RADIUS * np.outer(
+        np.ones_like(u),
+        np.cos(v),
+    )
+
+    ax.plot_surface(
+        x,
+        y,
+        z,
+        color=EARTH_COLOR,
+        alpha=0.65,
+        linewidth=0,
+        shade=True,
+    )
+
+    # ======================================================
+    # Orbit
+    # ======================================================
+
     ax.plot(
         position[:, 0],
         position[:, 1],
         position[:, 2],
-        linewidth=2,
+        color=ORBIT_COLOR,
+        linewidth=2.5,
         label="Orbit",
     )
 
+    # ======================================================
+    # Start / End
+    # ======================================================
+
     ax.scatter(
-        0,
-        0,
-        0,
-        s=200,
-        label="Earth",
+        *position[0],
+        color=START_COLOR,
+        s=60,
+        label="Start",
     )
+
+    ax.scatter(
+        *position[-1],
+        color=END_COLOR,
+        s=60,
+        label="End",
+    )
+
+    # ======================================================
+    # Labels
+    # ======================================================
 
     ax.set_xlabel("X [m]")
 
@@ -61,27 +119,29 @@ def plot_orbit(
     ax.set_zlabel("Z [m]")
 
     ax.set_title(
-        "Orbit Trajectory",
+        "Earth Observation Satellite Orbit",
         fontsize=TITLE_FONT_SIZE,
+    )
+
+    # ======================================================
+    # Equal Scaling
+    # ======================================================
+
+    set_equal_axis_3d(ax)
+
+    # ======================================================
+    # Camera
+    # ======================================================
+
+    ax.view_init(
+        elev=25,
+        azim=40,
     )
 
     ax.legend()
 
-    output_directory = Path(
-        output_directory
+    save_figure(
+        fig,
+        "orbit.png",
+        output_directory,
     )
-
-    output_directory.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    fig.tight_layout()
-
-    fig.savefig(
-        output_directory / "orbit.png",
-        dpi=300,
-        bbox_inches="tight",
-    )
-
-    plt.close(fig)

@@ -1,95 +1,221 @@
 """
 analysis/report.py
 
-Automatic simulation report generation.
+Automatic engineering report generation for the
+Earth Observation Satellite simulator.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from .metrics import compute_metrics
+from analysis.metrics import compute_metrics
 
-from .plotting import (
-    plot_attitude,
-    plot_body_rates,
-    plot_control_torque,
-    plot_disturbance_torque,
-    plot_wheel_momentum,
-    plot_magnetic_field,
-    plot_orbit,
+# -----------------------------
+# Plotting Modules
+# -----------------------------
+
+from analysis.plotting.orbit import plot_orbit
+
+from analysis.plotting.attitude import plot_attitude
+
+from analysis.plotting.attitude_error import plot_attitude_error
+
+from analysis.plotting.quaternion_norm import plot_quaternion_norm
+
+from analysis.plotting.body_rates import plot_body_rates
+
+from analysis.plotting.body_rate_norm import plot_body_rate_norm
+
+from analysis.plotting.control_torque import plot_control_torque
+
+from analysis.plotting.control_effort import plot_control_effort
+
+from analysis.plotting.disturbance_torque import plot_disturbance_torque
+
+from analysis.plotting.magnetic_field import plot_magnetic_field
+
+from analysis.plotting.wheel_momentum import plot_wheel_momentum
+
+from analysis.plotting.simulation_dashboard import (
+    plot_simulation_dashboard,
 )
 
 
+# ==========================================================
+# Generate Report
+# ==========================================================
+
 def generate_report(
-    telemetry: dict,
-    output_directory: str = "analysis",
+    telemetry,
+    output_directory="analysis/results",
 ):
     """
-    Generate all figures and simulation report.
+    Generate a complete engineering report.
     """
 
-    figures_directory = Path(output_directory) / "figures"
-    results_directory = Path(output_directory) / "results"
+    output_directory = Path(output_directory)
 
-    figures_directory.mkdir(parents=True, exist_ok=True)
-    results_directory.mkdir(parents=True, exist_ok=True)
+    figures = output_directory / "figures"
 
-    print("\nGenerating figures...")
+    figures.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    print()
+
+    print("="*60)
+
+    print("Generating Engineering Report")
+
+    print("="*60)
+
+    # ------------------------------------------------------
+    # Compute metrics
+    # ------------------------------------------------------
+
+    metrics = compute_metrics(
+        telemetry
+    )
+
+    # ------------------------------------------------------
+    # Generate Figures
+    # ------------------------------------------------------
+
+    plot_orbit(
+        telemetry,
+        figures,
+    )
 
     plot_attitude(
         telemetry,
-        figures_directory,
+        figures,
+    )
+
+    plot_attitude_error(
+        telemetry,
+        figures,
+    )
+
+    plot_quaternion_norm(
+        telemetry,
+        figures,
     )
 
     plot_body_rates(
         telemetry,
-        figures_directory,
+        figures,
+    )
+
+    plot_body_rate_norm(
+        telemetry,
+        figures,
     )
 
     plot_control_torque(
         telemetry,
-        figures_directory,
+        figures,
+    )
+
+    plot_control_effort(
+        telemetry,
+        figures,
     )
 
     plot_disturbance_torque(
         telemetry,
-        figures_directory,
-    )
-
-    plot_wheel_momentum(
-        telemetry,
-        figures_directory,
+        figures,
     )
 
     plot_magnetic_field(
         telemetry,
-        figures_directory,
+        figures,
     )
 
-    plot_orbit(
+    plot_wheel_momentum(
         telemetry,
-        figures_directory,
+        figures,
     )
 
-    metrics = compute_metrics(
+    plot_simulation_dashboard(
         telemetry,
+        figures,
     )
 
-    report = results_directory / "simulation_report.md"
+    # ------------------------------------------------------
+    # Metrics Summary
+    # ------------------------------------------------------
 
-    with open(report, "w") as f:
+    report_file = output_directory / "summary.txt"
 
-        f.write("# Earth Observation Satellite Simulation Report\n\n")
+    with open(
+        report_file,
+        "w",
+    ) as f:
 
-        f.write("## Summary\n\n")
+        f.write(
+            "EARTH OBSERVATION SATELLITE\n"
+        )
 
-        for key, value in metrics.items():
+        f.write(
+            "Engineering Verification Summary\n\n"
+        )
 
-            f.write(f"- **{key.replace('_',' ').title()}** : {value}\n")
+        f.write(
+            f"Maximum Attitude Error     : {metrics.maximum_attitude_error:.6f} deg\n"
+        )
 
-    print("✔ Figures saved")
+        f.write(
+            f"RMS Attitude Error         : {metrics.rms_attitude_error:.6f} deg\n"
+        )
 
-    print("✔ Report saved")
+        f.write(
+            f"Settling Time              : {metrics.settling_time:.3f} s\n"
+        )
 
-    print(results_directory / "simulation_report.md")
+        f.write(
+            f"Maximum Body Rate          : {metrics.maximum_body_rate:.6e} rad/s\n"
+        )
+
+        f.write(
+            f"RMS Body Rate              : {metrics.rms_body_rate:.6e} rad/s\n"
+        )
+
+        f.write(
+            f"Maximum Control Torque     : {metrics.maximum_control_torque:.6e} Nm\n"
+        )
+
+        f.write(
+            f"RMS Control Torque         : {metrics.rms_control_torque:.6e} Nm\n"
+        )
+
+        f.write(
+            f"Maximum Wheel Momentum     : {metrics.maximum_wheel_momentum:.6f} Nms\n"
+        )
+
+        f.write(
+            f"Quaternion Norm Error      : {metrics.quaternion_norm_error:.6e}\n"
+        )
+
+    print()
+
+    print("✓ Figures saved to")
+
+    print(figures)
+
+    print()
+
+    print("✓ Metrics summary saved to")
+
+    print(report_file)
+
+    print()
+
+    print("="*60)
+
+    print("Report generation complete")
+
+    print("="*60)
+
+    return metrics

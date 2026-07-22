@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 
 from .style import (
     FIGURE_SIZE,
@@ -25,6 +25,10 @@ from .style import (
 )
 
 
+# ==========================================================
+# Figure Utilities
+# ==========================================================
+
 def create_figure():
     """Create a standard figure."""
 
@@ -34,6 +38,7 @@ def create_figure():
 
 
 def configure_axes(ax):
+    """Apply common axis formatting."""
 
     ax.grid(
         True,
@@ -49,11 +54,90 @@ def configure_axes(ax):
     )
 
 
+# ==========================================================
+# 3D Utilities
+# ==========================================================
+
+def set_equal_axis_3d(ax):
+    """
+    Force equal scaling on all three axes.
+    """
+
+    limits = np.array([
+        ax.get_xlim3d(),
+        ax.get_ylim3d(),
+        ax.get_zlim3d(),
+    ])
+
+    centers = limits.mean(axis=1)
+
+    radius = 0.5 * np.max(limits[:, 1] - limits[:, 0])
+
+    ax.set_xlim3d(
+        centers[0] - radius,
+        centers[0] + radius,
+    )
+
+    ax.set_ylim3d(
+        centers[1] - radius,
+        centers[1] + radius,
+    )
+
+    ax.set_zlim3d(
+        centers[2] - radius,
+        centers[2] + radius,
+    )
+
+
+# ==========================================================
+# Plot Helpers
+# ==========================================================
+
+def plot_horizontal_limit(
+    ax,
+    value,
+    label,
+    color="red",
+):
+    """Plot a horizontal requirement line."""
+
+    ax.axhline(
+        value,
+        linestyle="--",
+        linewidth=1.4,
+        color=color,
+        alpha=0.8,
+        label=label,
+    )
+
+
+def plot_vector_norm(
+    vector,
+):
+    """
+    Compute vector magnitude.
+    """
+
+    vector = np.asarray(vector)
+
+    return np.linalg.norm(
+        vector,
+        axis=1,
+    )
+
+
+# ==========================================================
+# File Utilities
+# ==========================================================
+
 def save_figure(
     fig,
     filename,
     output_directory,
 ):
+    """
+    Save figure to disk.
+    """
 
     output_directory = Path(output_directory)
 
@@ -77,10 +161,17 @@ def save_figure(
     print(f"✓ Saved {output_path}")
 
 
+# ==========================================================
+# Validation
+# ==========================================================
+
 def validate_telemetry(
-    telemetry: dict,
-    keys: list[str],
+    telemetry,
+    keys,
 ):
+    """
+    Ensure telemetry contains required channels.
+    """
 
     for key in keys:
 
@@ -90,6 +181,10 @@ def validate_telemetry(
                 f"Telemetry channel '{key}' not found."
             )
 
+
+# ==========================================================
+# Generic Time-Series Plot
+# ==========================================================
 
 def plot_timeseries(
     *,
@@ -101,13 +196,15 @@ def plot_timeseries(
     filename,
     output_directory,
 ):
+    """
+    Generic multi-channel plotting utility.
+    """
 
     fig, ax = create_figure()
 
     data = np.asarray(data)
 
     if data.ndim == 1:
-
         data = data.reshape(-1, 1)
 
     for i in range(data.shape[1]):
