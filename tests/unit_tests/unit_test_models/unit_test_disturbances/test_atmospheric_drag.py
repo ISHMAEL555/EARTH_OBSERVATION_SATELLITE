@@ -5,7 +5,13 @@ Unit tests for models/disturbances/atmospheric_drag.py
 import numpy as np
 import pytest
 
-from models.disturbances.atmospheric_drag import AtmosphericDrag
+from models.disturbances.atmospheric_drag import (
+    AtmosphericDrag,
+)
+
+from models.disturbances.disturbance_state import (
+    DisturbanceState,
+)
 
 from tests.test_config.constants import (
     ZERO_VECTOR3,
@@ -32,22 +38,62 @@ def atmospheric_drag():
 
 
 @pytest.fixture
-def density():
-    """Representative atmospheric density."""
+def state():
+    """Nominal disturbance state."""
 
-    return 1.0e-12
+    return DisturbanceState(
 
+        time=0.0,
 
-@pytest.fixture
-def spacecraft_velocity():
-    """Representative spacecraft velocity."""
+        position_eci=np.array(
+            [
+                7000e3,
+                0.0,
+                0.0,
+            ]
+        ),
 
-    return np.array(
-        [
-            0.0,
-            7550.0,
-            0.0,
-        ]
+        velocity_eci=np.array(
+            [
+                0.0,
+                7550.0,
+                0.0,
+            ]
+        ),
+
+        orbit_radius=7000e3,
+
+        radial_unit_vector_eci=np.array(
+            [
+                1.0,
+                0.0,
+                0.0,
+            ]
+        ),
+
+        body_to_eci_dcm=np.eye(3),
+
+        inertia_matrix=np.diag(
+            [
+                120.0,
+                100.0,
+                80.0,
+            ]
+        ),
+
+        magnetic_field_eci=np.zeros(3),
+
+        magnetic_field_body=np.zeros(3),
+
+        atmospheric_density=1.0e-12,
+
+        solar_vector_eci=np.array(
+            [
+                1.0,
+                0.0,
+                0.0,
+            ]
+        ),
     )
 
 
@@ -56,7 +102,6 @@ def spacecraft_velocity():
 # ==========================================================
 
 def test_constructor(atmospheric_drag):
-    """Verify constructor stores parameters."""
 
     assert atmospheric_drag.drag_coefficient == pytest.approx(
         2.2
@@ -85,22 +130,17 @@ def test_invalid_reference_area():
             drag_coefficient=2.2,
             reference_area=-1.0,
         )
-
-
 # ==========================================================
 # Drag Force
 # ==========================================================
 
 def test_compute_returns_vector(
     atmospheric_drag,
-    density,
-    spacecraft_velocity,
+    state,
 ):
-    """Compute should return a 3-vector."""
 
     force = atmospheric_drag.compute(
-        density,
-        spacecraft_velocity,
+        state
     )
 
     assert force.shape == (3,)
@@ -108,28 +148,27 @@ def test_compute_returns_vector(
 
 def test_compute_returns_finite_values(
     atmospheric_drag,
-    density,
-    spacecraft_velocity,
+    state,
 ):
-    """Computed drag force should contain finite values."""
 
     force = atmospheric_drag.compute(
-        density,
-        spacecraft_velocity,
+        state
     )
 
-    assert np.all(np.isfinite(force))
+    assert np.all(
+        np.isfinite(force)
+    )
 
 
 def test_zero_velocity_returns_zero_force(
     atmospheric_drag,
-    density,
+    state,
 ):
-    """Zero velocity should produce zero drag."""
+
+    state.velocity_eci = np.zeros(3)
 
     force = atmospheric_drag.compute(
-        density,
-        np.zeros(3),
+        state
     )
 
     assert np.allclose(
@@ -141,11 +180,10 @@ def test_zero_velocity_returns_zero_force(
 
 def test_drag_force_opposes_velocity(
     atmospheric_drag,
-    density,
+    state,
 ):
-    """Drag must oppose the velocity vector."""
 
-    velocity = np.array(
+    state.velocity_eci = np.array(
         [
             7500.0,
             0.0,
@@ -154,8 +192,7 @@ def test_drag_force_opposes_velocity(
     )
 
     force = atmospheric_drag.compute(
-        density,
-        velocity,
+        state
     )
 
     assert force[0] < 0.0
@@ -163,52 +200,60 @@ def test_drag_force_opposes_velocity(
 
 def test_drag_force_increases_with_velocity(
     atmospheric_drag,
-    density,
+    state,
 ):
-    """Drag magnitude should increase with speed."""
+
+    state.velocity_eci = np.array(
+        [
+            7000.0,
+            0.0,
+            0.0,
+        ]
+    )
 
     force1 = atmospheric_drag.compute(
-        density,
-        np.array(
-            [
-                7000.0,
-                0.0,
-                0.0,
-            ]
-        ),
+        state
+    )
+
+    state.velocity_eci = np.array(
+        [
+            8000.0,
+            0.0,
+            0.0,
+        ]
     )
 
     force2 = atmospheric_drag.compute(
-        density,
-        np.array(
-            [
-                8000.0,
-                0.0,
-                0.0,
-            ]
-        ),
+        state
     )
 
-    assert np.linalg.norm(force2) > np.linalg.norm(force1)
+    assert np.linalg.norm(
+        force2
+    ) > np.linalg.norm(
+        force1
+    )
 
 
 def test_drag_force_scales_with_density(
     atmospheric_drag,
-    spacecraft_velocity,
+    state,
 ):
-    """Drag magnitude should increase with density."""
+
+    state.atmospheric_density = 1.0e-13
 
     force1 = atmospheric_drag.compute(
-        1.0e-13,
-        spacecraft_velocity,
+        state
     )
+
+    state.atmospheric_density = 2.0e-13
 
     force2 = atmospheric_drag.compute(
-        2.0e-13,
-        spacecraft_velocity,
+        state
     )
 
-    assert np.linalg.norm(force2) == pytest.approx(
+    assert np.linalg.norm(
+        force2
+    ) == pytest.approx(
         2.0 * np.linalg.norm(force1),
         rel=RTOL_DEFAULT,
     )
@@ -220,41 +265,48 @@ def test_drag_force_scales_with_density(
 
 def test_negative_density(
     atmospheric_drag,
-    spacecraft_velocity,
+    state,
 ):
-    """Negative density should raise ValueError."""
+
+    state.atmospheric_density = -1.0
 
     with pytest.raises(ValueError):
-
-        atmospheric_drag.compute(
-            -1.0,
-            spacecraft_velocity,
-        )
+        atmospheric_drag.compute(state)
 
 
 def test_invalid_velocity_shape(
     atmospheric_drag,
-    density,
+    state,
 ):
-    """Velocity must have shape (3,)."""
+
+    state.velocity_eci = np.zeros(2)
 
     with pytest.raises(ValueError):
-
-        atmospheric_drag.compute(
-            density,
-            np.zeros(2),
-        )
+        atmospheric_drag.compute(state)
 
 
 def test_invalid_velocity_type(
     atmospheric_drag,
-    density,
+    state,
 ):
-    """Velocity must be array-like with shape (3,)."""
+
+    state.velocity_eci = np.eye(3)
 
     with pytest.raises(ValueError):
+        atmospheric_drag.compute(state)
 
-        atmospheric_drag.compute(
-            density,
-            np.eye(3),
-        )
+
+def test_input_state_not_modified(
+    atmospheric_drag,
+    state,
+):
+    """AtmosphericDrag should not modify DisturbanceState."""
+
+    original = state.velocity_eci.copy()
+
+    atmospheric_drag.compute(state)
+
+    assert np.array_equal(
+        state.velocity_eci,
+        original,
+    )

@@ -24,7 +24,7 @@ same interface and registering it with this manager.
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any
 
 import numpy as np
 
@@ -38,13 +38,16 @@ class DisturbanceManager:
 
     def __init__(self):
 
-        self._models: List = []
+        self._models: list[Any] = []
 
     # =====================================================
     # Registration
     # =====================================================
 
-    def add(self, model) -> None:
+    def add(
+        self,
+        model,
+    ) -> None:
         """
         Register a disturbance model.
 
@@ -56,17 +59,18 @@ class DisturbanceManager:
                 compute(state) -> ndarray(3,)
         """
 
-        if not hasattr(model, "compute"):
-
+        if not hasattr(
+            model,
+            "compute",
+        ):
             raise TypeError(
-
                 f"{type(model).__name__} "
-
                 "does not implement compute()."
-
             )
 
-        self._models.append(model)
+        self._models.append(
+            model
+        )
 
     # =====================================================
     # Public Interface
@@ -85,15 +89,26 @@ class DisturbanceManager:
 
         Returns
         -------
-        ndarray (3,)
+        ndarray, shape (3,)
             Total disturbance torque [N·m]
         """
 
-        total = np.zeros(3)
+        total = np.zeros(
+            3,
+            dtype=float,
+        )
 
         for model in self._models:
 
-            torque = model.compute(state)
+            torque = model.compute(
+                state
+            )
+
+            if torque is None:
+                raise ValueError(
+                    f"{type(model).__name__} "
+                    "returned None."
+                )
 
             torque = np.asarray(
                 torque,
@@ -101,13 +116,9 @@ class DisturbanceManager:
             )
 
             if torque.shape != (3,):
-
                 raise ValueError(
-
                     f"{type(model).__name__} "
-
                     "returned an invalid torque vector."
-
                 )
 
             total += torque
@@ -118,8 +129,9 @@ class DisturbanceManager:
     # Utilities
     # =====================================================
 
-    def clear(self):
-
+    def clear(
+        self,
+    ) -> None:
         """
         Remove all registered models.
         """
@@ -127,14 +139,38 @@ class DisturbanceManager:
         self._models.clear()
 
     @property
-    def models(self):
+    def models(
+        self,
+    ) -> tuple:
+        """
+        Registered disturbance models.
+        """
 
-        return tuple(self._models)
+        return tuple(
+            self._models
+        )
 
-    def __len__(self):
+    def __len__(
+        self,
+    ) -> int:
 
-        return len(self._models)
+        return len(
+            self._models
+        )
 
-    def __iter__(self):
+    def __iter__(
+        self,
+    ):
 
-        return iter(self._models)
+        return iter(
+            self._models
+        )
+
+    def __repr__(
+        self,
+    ) -> str:
+
+        return (
+            f"{type(self).__name__}"
+            f"(models={len(self)})"
+        )

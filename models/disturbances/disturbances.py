@@ -24,7 +24,22 @@ class Disturbances:
     # Registration
     # ------------------------------------------------------
 
-    def add(self, disturbance):
+    def add(
+        self,
+        disturbance,
+    ):
+        """
+        Register a disturbance model.
+        """
+
+        if not hasattr(
+            disturbance,
+            "compute",
+        ):
+            raise TypeError(
+                "Disturbance model must implement "
+                "'compute(state)'."
+            )
 
         self._disturbance_models.append(
             disturbance
@@ -38,8 +53,24 @@ class Disturbances:
         self,
         state: DisturbanceState,
     ) -> np.ndarray:
+        """
+        Compute the total disturbance torque.
 
-        total_torque = np.zeros(3)
+        Parameters
+        ----------
+        state : DisturbanceState
+            Current spacecraft/environment state.
+
+        Returns
+        -------
+        ndarray, shape (3,)
+            Total disturbance torque expressed in the body frame.
+        """
+
+        total_torque = np.zeros(
+            3,
+            dtype=float,
+        )
 
         for disturbance in self._disturbance_models:
 

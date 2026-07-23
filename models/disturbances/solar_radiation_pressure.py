@@ -20,6 +20,7 @@ Future Models
 - Surface optical properties
 - Self-shadowing
 - Articulated solar arrays
+- Center-of-pressure torque model
 
 References
 ----------
@@ -89,7 +90,7 @@ class SolarRadiationPressure:
 
         Returns
         -------
-        ndarray (3,)
+        ndarray, shape (3,)
             Solar radiation pressure force expressed
             in the ECI frame [N].
         """
@@ -97,14 +98,16 @@ class SolarRadiationPressure:
         sun_direction_eci = np.asarray(
             state.solar_vector_eci,
             dtype=float,
-        )
+        ).copy()
 
         if sun_direction_eci.shape != (3,):
             raise ValueError(
                 "solar_vector_eci must have shape (3,)."
             )
 
-        norm = np.linalg.norm(sun_direction_eci)
+        norm = np.linalg.norm(
+            sun_direction_eci
+        )
 
         if norm < 1e-12:
             return np.zeros(3)
@@ -112,21 +115,14 @@ class SolarRadiationPressure:
         sun_direction_eci /= norm
 
         force_magnitude = (
-
             self.solar_radiation_pressure
-
             * self.reflectivity_coefficient
-
             * self.reference_area
-
         )
 
         solar_force_eci = (
-
             -force_magnitude
-
             * sun_direction_eci
-
         )
 
         return solar_force_eci

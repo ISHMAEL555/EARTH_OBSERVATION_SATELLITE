@@ -71,16 +71,23 @@ class AtmosphericDrag:
 
         Returns
         -------
-        ndarray (3,)
-            Aerodynamic drag force expressed in the ECI frame [N].
+        ndarray, shape (3,)
+            Aerodynamic drag force expressed in the
+            ECI frame [N].
         """
 
-        density = float(state.atmospheric_density)
+        density = float(
+            state.atmospheric_density
+        )
 
         velocity_eci = np.asarray(
             state.velocity_eci,
             dtype=float,
-        )
+        ).copy()
+
+        # ------------------------------------------------------
+        # Validation
+        # ------------------------------------------------------
 
         if density < 0.0:
             raise ValueError(
@@ -116,7 +123,9 @@ class AtmosphericDrag:
             * self.reference_area
         )
 
-        return (
+        drag_force_eci = (
             -drag_force
             * velocity_unit
         )
+
+        return drag_force_eci

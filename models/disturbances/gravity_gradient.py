@@ -67,24 +67,24 @@ class GravityGradient:
 
         Returns
         -------
-        ndarray (3,)
+        ndarray, shape (3,)
             Gravity-gradient torque expressed in the body frame.
         """
 
         body_to_eci_dcm = np.asarray(
             state.body_to_eci_dcm,
             dtype=float,
-        )
+        ).copy()
 
         inertia_matrix = np.asarray(
             state.inertia_matrix,
             dtype=float,
-        )
+        ).copy()
 
         radial_unit_vector_eci = np.asarray(
             state.radial_unit_vector_eci,
             dtype=float,
-        )
+        ).copy()
 
         orbit_radius = float(
             state.orbit_radius
@@ -123,9 +123,7 @@ class GravityGradient:
                 "radial_unit_vector_eci cannot be zero."
             )
 
-        radial_unit_vector_eci = (
-            radial_unit_vector_eci / radial_norm
-        )
+        radial_unit_vector_eci /= radial_norm
 
         # ------------------------------------------------------
         # Convert radial direction to body frame
@@ -142,7 +140,7 @@ class GravityGradient:
         # Gravity-gradient torque
         # ------------------------------------------------------
 
-        gravity_gradient_torque = (
+        gravity_gradient_torque_body = (
 
             3.0
             * self.gravitational_parameter
@@ -159,4 +157,4 @@ class GravityGradient:
 
         )
 
-        return gravity_gradient_torque
+        return gravity_gradient_torque_body
