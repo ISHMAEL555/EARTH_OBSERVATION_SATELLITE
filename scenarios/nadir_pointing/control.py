@@ -26,11 +26,8 @@ def update_control(scenario):
     """
 
     update_controller(scenario)
-
     update_reaction_wheels(scenario)
-
     update_magnetorquers(scenario)
-
     compute_total_torque(scenario)
 
 
@@ -43,21 +40,19 @@ def update_controller(scenario):
     Compute the commanded spacecraft body torque.
     """
 
+    spacecraft = scenario.sim.spacecraft
+
     scenario.control_torque = (
 
         scenario.sim.controller.compute(
 
-            current_quaternion=
-                scenario.sim.spacecraft.q,
+            current_quaternion=spacecraft.quaternion,
 
-            desired_quaternion=
-                scenario.q_ref,
+            desired_quaternion=scenario.q_ref,
 
-            body_rates=
-                scenario.sim.spacecraft.omega,
+            body_rates=spacecraft.angular_velocity,
 
-            desired_body_rates=
-                scenario.omega_ref,
+            desired_body_rates=scenario.omega_ref,
 
         )
 
@@ -74,19 +69,14 @@ def update_reaction_wheels(scenario):
     """
 
     (
-
         scenario.actual_rw_torque,
-
         scenario.wheel_momentum,
-
         scenario.rw_body_torque,
-
     ) = (
 
         scenario.sim.reaction_wheels.update(
 
-            commanded_body_torque=
-                scenario.control_torque,
+            commanded_body_torque=scenario.control_torque,
 
             dt=scenario.sim.time_step,
 
@@ -110,11 +100,8 @@ def update_magnetorquers(scenario):
     commanded_dipole = np.zeros(3)
 
     (
-
         scenario.actual_dipole,
-
         scenario.magnetorquer_torque,
-
     ) = (
 
         scenario.sim.magnetorquers.compute(
@@ -140,13 +127,7 @@ def compute_total_torque(scenario):
     scenario.total_torque = (
 
         scenario.rw_body_torque
-
-        +
-
-        scenario.magnetorquer_torque
-
-        +
-
-        scenario.disturbance_torque
+        + scenario.magnetorquer_torque
+        + scenario.disturbance_torque
 
     )

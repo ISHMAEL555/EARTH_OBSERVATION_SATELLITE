@@ -30,11 +30,8 @@ def update_environment(scenario):
     """
 
     update_magnetic_field(scenario)
-
     update_atmosphere(scenario)
-
     update_sun(scenario)
-
     update_disturbances(scenario)
 
 
@@ -43,25 +40,22 @@ def update_environment(scenario):
 # ==========================================================
 
 def update_magnetic_field(scenario):
+    """
+    Update the Earth's magnetic field in both ECI and body frames.
+    """
 
     scenario.magnetic_field_eci = (
-
         scenario.sim.magnetic_field.compute(
-
             scenario.position_eci
-
         )
-
     )
 
-    C_bi = scenario.sim.spacecraft.body_to_eci_dcm()
+    # Body-to-ECI Direction Cosine Matrix (property)
+    C_bi = scenario.sim.spacecraft.body_to_eci_dcm
 
+    # Transform magnetic field into the body frame
     scenario.magnetic_field_body = (
-
-        C_bi.T
-
-        @ scenario.magnetic_field_eci
-
+        C_bi.T @ scenario.magnetic_field_eci
     )
 
 
@@ -83,7 +77,7 @@ def update_atmosphere(scenario):
 
 def update_sun(scenario):
     """
-    Placeholder sun model.
+    Placeholder Sun model.
     """
 
     scenario.sun_vector_eci = np.zeros(3)
@@ -108,40 +102,42 @@ def update_disturbances(scenario):
         )
 
     radial_unit_vector_eci = (
-        position_eci
-        / orbit_radius
+        position_eci / orbit_radius
     )
 
     disturbance_state = DisturbanceState(
 
         time=scenario.simulator.time,
 
+        # --------------------------------------------------
         # Orbit
+        # --------------------------------------------------
+
         position_eci=position_eci,
         velocity_eci=scenario.velocity_eci,
 
         orbit_radius=orbit_radius,
         radial_unit_vector_eci=radial_unit_vector_eci,
 
+        # --------------------------------------------------
         # Spacecraft
-        body_to_eci_dcm=
-            scenario.sim.spacecraft.body_to_eci_dcm(),
+        # --------------------------------------------------
 
-        inertia_matrix=
-            scenario.sim.spacecraft.inertia,
+        body_to_eci_dcm=scenario.sim.spacecraft.body_to_eci_dcm,
 
+        inertia_matrix=scenario.sim.spacecraft.inertia,
+
+        # --------------------------------------------------
         # Environment
-        magnetic_field_eci=
-            scenario.magnetic_field_eci,
+        # --------------------------------------------------
 
-        magnetic_field_body=
-            scenario.magnetic_field_body,
+        magnetic_field_eci=scenario.magnetic_field_eci,
 
-        atmospheric_density=
-            scenario.atmospheric_density,
+        magnetic_field_body=scenario.magnetic_field_body,
 
-        solar_vector_eci=
-            scenario.sun_vector_eci,
+        atmospheric_density=scenario.atmospheric_density,
+
+        solar_vector_eci=scenario.sun_vector_eci,
 
     )
 
