@@ -1,12 +1,12 @@
 EARTH OBSERVATION SATELLITE
 Engineering Verification Summary
 
-Maximum Attitude Error     : 179.999981 deg
-RMS Attitude Error         : 175.686235 deg
+Maximum Attitude Error     : 179.955160 deg
+RMS Attitude Error         : 106.364897 deg
 Settling Time              : nan s
-Maximum Body Rate          : 6.528098e-02 rad/s
-RMS Body Rate              : 1.801096e-02 rad/s
-Maximum Control Torque     : 1.182423e-01 Nm
-RMS Control Torque         : 7.897666e-02 Nm
-Maximum Wheel Momentum     : 1.260339 Nms
+Maximum Body Rate          : 9.191028e-02 rad/s
+RMS Body Rate              : 4.593313e-02 rad/s
+Maximum Control Torque     : 1.329965e-01 Nm
+RMS Control Torque         : 4.825321e-02 Nm
+Maximum Wheel Momentum     : 2.281319 Nms
 Quaternion Norm Error      : 2.220446e-16

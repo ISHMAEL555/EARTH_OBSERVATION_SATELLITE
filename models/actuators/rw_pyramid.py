@@ -155,7 +155,7 @@ class RWPyramid:
                 "dt must be positive."
             )
 
-        commanded_wheel_torque = (
+        commanded_wheel_torque = -(
 
             self.allocation_matrix_pinv
 
@@ -189,7 +189,7 @@ class RWPyramid:
 
         )
 
-        self.body_torque = (
+        self.body_torque = -(
 
             self.allocation_matrix
 

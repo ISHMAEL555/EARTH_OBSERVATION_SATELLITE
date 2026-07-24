@@ -1,7 +1,21 @@
 """
 guidance/nadir_pointing.py
 
-LVLH Nadir Pointing Guidance Law
+LVLH Nadir Pointing Guidance
+
+Body Frame
+----------
++X : Along-track (Velocity)
++Y : Cross-track
++Z : Nadir (Toward Earth)
+
+Quaternion Convention
+---------------------
+Scalar-first
+
+Quaternion represents
+
+    Body -> ECI
 """
 
 from __future__ import annotations
@@ -9,20 +23,12 @@ from __future__ import annotations
 import numpy as np
 
 from guidance.base import Guidance
+from models.dynamics.quaternion import dcm_to_quaternion
 
 
 class NadirPointingGuidance(Guidance):
     """
     LVLH Nadir Pointing Guidance.
-
-    Body Frame
-    ----------
-    +X : Velocity direction
-    +Y : Orbit normal
-    +Z : Earth (Nadir)
-
-    Reference frame:
-        ECI -> LVLH
     """
 
     def compute(
@@ -30,123 +36,57 @@ class NadirPointingGuidance(Guidance):
         position_eci: np.ndarray,
         velocity_eci: np.ndarray,
     ):
-        """
-        Compute reference quaternion and angular velocity.
-        """
 
         r = np.asarray(position_eci, dtype=float)
         v = np.asarray(velocity_eci, dtype=float)
 
         # --------------------------------------------------
-        # LVLH axes
+        # Unit vectors
         # --------------------------------------------------
 
-        z_hat = -r / np.linalg.norm(r)
+        r_hat = r / np.linalg.norm(r)
+        v_hat = v / np.linalg.norm(v)
 
-        h = np.cross(r, v)
-        y_hat = -h / np.linalg.norm(h)
+        # --------------------------------------------------
+        # LVLH Frame
+        # --------------------------------------------------
 
-        x_hat = np.cross(y_hat, z_hat)
-        x_hat /= np.linalg.norm(x_hat)
+        # +Z : Toward Earth
+        z_hat = -r_hat
 
-        # Re-orthogonalize
+        # +X : Along-track
+        x_hat = v_hat
+
+        # +Y : Complete right-handed frame
         y_hat = np.cross(z_hat, x_hat)
         y_hat /= np.linalg.norm(y_hat)
 
+        # Re-orthogonalize X
+        x_hat = np.cross(y_hat, z_hat)
+        x_hat /= np.linalg.norm(x_hat)
+
         # --------------------------------------------------
-        # Rotation matrix
+        # Body -> ECI DCM
+        # --------------------------------------------------
+
+        C_bi = np.column_stack((x_hat,y_hat,z_hat,))
+
+        # Trial 1
+        q_ref = dcm_to_quaternion(C_bi.T)
+
+        # --------------------------------------------------
+        # Reference Body Rates
         #
-        # Columns = body axes expressed in ECI
-        # --------------------------------------------------
-
-        C = np.column_stack(
-            (
-                x_hat,
-                y_hat,
-                z_hat,
-            )
-        )
-
-        # --------------------------------------------------
-        # DCM -> Quaternion
-        # Quaternion format:
+        # TEMPORARY:
         #
-        # [w, x, y, z]
-        # --------------------------------------------------
-
-        q_ref = self.dcm_to_quaternion(C)
-
-        # --------------------------------------------------
-        # Reference body rates
+        # The controller regulation has already been verified
+        # using zero reference body rates.
         #
-        # Circular orbit approximation
+        # Until the LVLH angular velocity is derived
+        # consistently from the reference frame,
+        # command zero body rates.
         # --------------------------------------------------
 
-        mu = 3.986004418e14
-
-        orbit_rate = np.sqrt(
-            mu / np.linalg.norm(r) ** 3
-        )
-
-        omega_ref = np.array(
-            [
-                0.0,
-                orbit_rate,
-                0.0,
-            ]
-        )
+        omega_ref = np.zeros(3)
 
         return q_ref, omega_ref
-
-    @staticmethod
-    def dcm_to_quaternion(C):
-        """
-        Convert DCM to quaternion.
-
-        Quaternion ordering:
-            [w, x, y, z]
-        """
-
-        q = np.zeros(4)
-
-        tr = np.trace(C)
-
-        if tr > 0:
-
-            s = np.sqrt(tr + 1.0) * 2.0
-
-            q[0] = 0.25 * s
-            q[1] = (C[2, 1] - C[1, 2]) / s
-            q[2] = (C[0, 2] - C[2, 0]) / s
-            q[3] = (C[1, 0] - C[0, 1]) / s
-
-        elif C[0, 0] > C[1, 1] and C[0, 0] > C[2, 2]:
-
-            s = np.sqrt(1.0 + C[0, 0] - C[1, 1] - C[2, 2]) * 2.0
-
-            q[0] = (C[2, 1] - C[1, 2]) / s
-            q[1] = 0.25 * s
-            q[2] = (C[0, 1] + C[1, 0]) / s
-            q[3] = (C[0, 2] + C[2, 0]) / s
-
-        elif C[1, 1] > C[2, 2]:
-
-            s = np.sqrt(1.0 + C[1, 1] - C[0, 0] - C[2, 2]) * 2.0
-
-            q[0] = (C[0, 2] - C[2, 0]) / s
-            q[1] = (C[0, 1] + C[1, 0]) / s
-            q[2] = 0.25 * s
-            q[3] = (C[1, 2] + C[2, 1]) / s
-
-        else:
-
-            s = np.sqrt(1.0 + C[2, 2] - C[0, 0] - C[1, 1]) * 2.0
-
-            q[0] = (C[1, 0] - C[0, 1]) / s
-            q[1] = (C[0, 2] + C[2, 0]) / s
-            q[2] = (C[1, 2] + C[2, 1]) / s
-            q[3] = 0.25 * s
-
-        q /= np.linalg.norm(q)
-
-        return q

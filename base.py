@@ -4,6 +4,8 @@ base.py
 Earth Observation Satellite Simulation Launcher.
 """
 
+import numpy as np
+
 from simulator.builder import Builder
 from simulator.simulator import Simulator
 
@@ -19,6 +21,11 @@ from scenarios.nadir_pointing.config import (
 from guidance.nadir_pointing import NadirPointingGuidance
 
 from analysis import generate_report
+
+from models.dynamics.quaternion import (
+    multiply,
+    inverse,
+)
 
 
 # ==========================================================
@@ -80,6 +87,68 @@ def main():
 if __name__ == "__main__":
 
     telemetry = main()
+
+    # ======================================================
+    # Debug
+    # ======================================================
+
+    print("\n" + "=" * 70)
+    print("DEBUG INFORMATION")
+    print("=" * 70)
+
+    print("\nINITIAL STATE")
+    print("-" * 70)
+
+    print("Current Quaternion:")
+    print(telemetry["quaternion"][0])
+
+    print("\nReference Quaternion:")
+    print(telemetry["reference_quaternion"][0])
+
+    print("\nCurrent Body Rates [rad/s]:")
+    print(telemetry["body_rates"][0])
+
+    print("\nReference Body Rates [rad/s]:")
+    print(telemetry["reference_body_rates"][0])
+
+    print("\nFINAL STATE")
+    print("-" * 70)
+
+    print("Current Quaternion:")
+    print(telemetry["quaternion"][-1])
+
+    print("\nReference Quaternion:")
+    print(telemetry["reference_quaternion"][-1])
+
+    print("\nCurrent Body Rates [rad/s]:")
+    print(telemetry["body_rates"][-1])
+
+    print("\nReference Body Rates [rad/s]:")
+    print(telemetry["reference_body_rates"][-1])
+
+    # ------------------------------------------------------
+    # Quaternion Error
+    # ------------------------------------------------------
+
+    q_error = multiply(
+        telemetry["reference_quaternion"][-1],
+        inverse(telemetry["quaternion"][-1]),
+    )
+
+    print("\nQuaternion Error:")
+    print(q_error)
+
+    angle_error = np.degrees(
+        2.0 * np.arccos(
+            np.clip(abs(q_error[0]), -1.0, 1.0)
+        )
+    )
+
+    print(f"\nComputed Angle Error : {angle_error:.6f} deg")
+
+    print("=" * 70)
+
+    # ======================================================
 
     print("\n" + "=" * 70)
     print("EARTH OBSERVATION SATELLITE SIMULATION")

@@ -1,24 +1,43 @@
 """
 controllers/quaternion_pd.py
 
-Quaternion Proportional-Derivative Tracking Controller
+Quaternion Proportional-Derivative Attitude Tracking Controller.
 
-Implements
+Implements the nonlinear quaternion PD control law
 
     τ = -Kp qe - Kd (ω - ωref)
 
+where
+
+    qe = q_current ⊗ q_ref⁻¹
+
+This error definition is consistent with the Body-to-ECI quaternion
+convention used throughout the spacecraft dynamics model.
+
 References
 ----------
-- Markley & Crassidis
-- Wie
+- Markley & Crassidis,
+  Fundamentals of Spacecraft Attitude Determination and Control
+
+- Wie,
+  Space Vehicle Dynamics and Control
 """
 
+from __future__ import annotations
+
 import numpy as np
+
+from models.dynamics.quaternion import (
+    normalize,
+    enforce_unique,
+    multiply,
+    inverse,
+)
 
 
 class QuaternionPD:
     """
-    Quaternion PD attitude tracking controller.
+    Quaternion Proportional-Derivative attitude tracking controller.
     """
 
     def __init__(
@@ -37,6 +56,9 @@ class QuaternionPD:
             "derivative_gain",
         )
 
+        # Debug counter
+        self._debug_counter = 0
+
     # ======================================================
     # Public Interface
     # ======================================================
@@ -49,19 +71,28 @@ class QuaternionPD:
         desired_body_rates: np.ndarray | None = None,
     ) -> np.ndarray:
         """
-        Compute commanded body torque.
+        Compute the commanded body torque.
 
         Parameters
         ----------
         current_quaternion : ndarray (4,)
+            Current spacecraft attitude quaternion
+            (Body → ECI).
+
         desired_quaternion : ndarray (4,)
+            Desired reference quaternion
+            (Body → ECI).
+
         body_rates : ndarray (3,)
+            Current body angular velocity [rad/s].
+
         desired_body_rates : ndarray (3,), optional
+            Desired body angular velocity [rad/s].
 
         Returns
         -------
         ndarray (3,)
-            Commanded body torque.
+            Commanded control torque [N·m].
         """
 
         current_quaternion = self._validate_quaternion(
@@ -78,7 +109,6 @@ class QuaternionPD:
         )
 
         if desired_body_rates is None:
-
             desired_body_rates = np.zeros(3)
 
         desired_body_rates = self._validate_vector(
@@ -86,32 +116,65 @@ class QuaternionPD:
             "desired_body_rates",
         )
 
-        # ---------------------------------------------
+        # --------------------------------------------------
         # Quaternion Error
-        # ---------------------------------------------
+        # --------------------------------------------------
 
-        q_error = self._quaternion_error(
+        q_error = multiply(
             current_quaternion,
-            desired_quaternion,
+            inverse(desired_quaternion),
         )
 
-        if q_error[0] < 0.0:
-            q_error = -q_error
+        q_error = enforce_unique(
+            q_error
+        )
 
         attitude_error = q_error[1:]
 
-        # ---------------------------------------------
+        # --------------------------------------------------
         # Angular Velocity Error
-        # ---------------------------------------------
+        # --------------------------------------------------
 
         rate_error = (
             body_rates
             - desired_body_rates
         )
 
-        # ---------------------------------------------
-        # PD Tracking Law
-        # ---------------------------------------------
+        # ======================================================
+        # DEBUG (Print first 10 controller calls)
+        # ======================================================
+
+        if self._debug_counter < 10:
+
+            print("\n======================================")
+            print(f"Controller Step {self._debug_counter}")
+
+            print("\nCurrent Quaternion")
+            print(current_quaternion)
+
+            print("\nDesired Quaternion")
+            print(desired_quaternion)
+
+            print("\nQuaternion Error")
+            print(q_error)
+
+            print("\nAttitude Error")
+            print(attitude_error)
+
+            print("\nCurrent Body Rates")
+            print(body_rates)
+
+            print("\nDesired Body Rates")
+            print(desired_body_rates)
+
+            print("\nRate Error")
+            print(rate_error)
+
+        self._debug_counter += 1
+
+        # --------------------------------------------------
+        # Quaternion PD Control Law
+        # --------------------------------------------------
 
         commanded_torque = (
 
@@ -121,51 +184,13 @@ class QuaternionPD:
 
         )
 
+        if self._debug_counter <= 10:
+
+            print("\nCommanded Torque")
+            print(commanded_torque)
+            print("======================================")
+
         return commanded_torque
-
-    # ======================================================
-    # Quaternion Utilities
-    # ======================================================
-
-    @staticmethod
-    def _quaternion_error(current, desired):
-
-        return QuaternionPD._quat_multiply(
-
-            desired,
-
-            QuaternionPD._quat_conjugate(current),
-
-        )
-
-    @staticmethod
-    def _quat_conjugate(q):
-
-        return np.array(
-            [
-                q[0],
-                -q[1],
-                -q[2],
-                -q[3],
-            ],
-            dtype=float,
-        )
-
-    @staticmethod
-    def _quat_multiply(q1, q2):
-
-        w1, x1, y1, z1 = q1
-        w2, x2, y2, z2 = q2
-
-        return np.array(
-            [
-                w1*w2 - x1*x2 - y1*y2 - z1*z2,
-                w1*x2 + x1*w2 + y1*z2 - z1*y2,
-                w1*y2 - x1*z2 + y1*w2 + z1*x2,
-                w1*z2 + x1*y2 - y1*x2 + z1*w2,
-            ],
-            dtype=float,
-        )
 
     # ======================================================
     # Validation
@@ -220,11 +245,11 @@ class QuaternionPD:
                 "Quaternion contains invalid values."
             )
 
-        norm = np.linalg.norm(q)
-
-        if norm < 1e-12:
+        if np.linalg.norm(q) < 1e-12:
             raise ValueError(
                 "Quaternion norm cannot be zero."
             )
 
-        return q / norm
+        return enforce_unique(
+            normalize(q)
+        )

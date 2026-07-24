@@ -13,6 +13,11 @@ from __future__ import annotations
 
 import numpy as np
 
+from models.dynamics.quaternion import (
+    inverse,
+    multiply,
+)
+
 
 class MissionAnalysis:
     """
@@ -22,7 +27,6 @@ class MissionAnalysis:
     def __init__(self, telemetry):
 
         self.telemetry = telemetry
-
         self.results = {}
 
     # --------------------------------------------------
@@ -35,11 +39,8 @@ class MissionAnalysis:
         """
 
         self.compute_pointing_error()
-
         self.compute_body_rate_statistics()
-
         self.compute_control_statistics()
-
         self.compute_reaction_wheel_statistics()
 
         return self.results
@@ -49,26 +50,25 @@ class MissionAnalysis:
     # --------------------------------------------------
 
     def compute_pointing_error(self):
+        """
+        Compute spacecraft pointing error with respect to
+        the reference attitude.
+        """
 
         q = self.telemetry["quaternion"]
-
         q_ref = self.telemetry["reference_quaternion"]
 
-        error_deg = []
+        error_deg = np.zeros(len(q))
 
-        for qi, qr in zip(q, q_ref):
+        for i, (qi, qr) in enumerate(zip(q, q_ref)):
 
-            dq = quaternion_error(qi, qr)
+            dq = multiply(qr, inverse(qi))
 
             angle = 2.0 * np.arccos(
-
                 np.clip(np.abs(dq[0]), -1.0, 1.0)
-
             )
 
-            error_deg.append(np.degrees(angle))
-
-        error_deg = np.asarray(error_deg)
+            error_deg[i] = np.degrees(angle)
 
         self.results["pointing"] = {
 
@@ -76,7 +76,7 @@ class MissionAnalysis:
 
             "max": np.max(error_deg),
 
-            "rms": np.sqrt(np.mean(error_deg ** 2))
+            "rms": np.sqrt(np.mean(error_deg ** 2)),
 
         }
 
@@ -89,18 +89,15 @@ class MissionAnalysis:
         omega = self.telemetry["body_rates"]
 
         magnitude = np.linalg.norm(
-
             omega,
-
-            axis=1
-
+            axis=1,
         )
 
         self.results["body_rates"] = {
 
             "max": np.max(magnitude),
 
-            "mean": np.mean(magnitude)
+            "mean": np.mean(magnitude),
 
         }
 
@@ -113,18 +110,15 @@ class MissionAnalysis:
         torque = self.telemetry["control_torque"]
 
         magnitude = np.linalg.norm(
-
             torque,
-
-            axis=1
-
+            axis=1,
         )
 
         self.results["control"] = {
 
             "peak": np.max(magnitude),
 
-            "average": np.mean(magnitude)
+            "average": np.mean(magnitude),
 
         }
 
@@ -137,60 +131,14 @@ class MissionAnalysis:
         H = self.telemetry["wheel_momentum"]
 
         H_mag = np.linalg.norm(
-
             H,
-
-            axis=1
-
+            axis=1,
         )
 
         self.results["reaction_wheels"] = {
 
             "maximum_momentum": np.max(H_mag),
 
-            "average_momentum": np.mean(H_mag)
+            "average_momentum": np.mean(H_mag),
 
         }
-
-
-# ==========================================================
-# Utilities
-# ==========================================================
-
-def quaternion_error(q, q_ref):
-    """
-    Quaternion error.
-
-    q_error = q_ref * q^{-1}
-    """
-
-    q_inv = q.copy()
-
-    q_inv[1:] *= -1.0
-
-    return quaternion_multiply(
-
-        q_ref,
-
-        q_inv
-
-    )
-
-
-def quaternion_multiply(q1, q2):
-
-    w1, x1, y1, z1 = q1
-
-    w2, x2, y2, z2 = q2
-
-    return np.array([
-
-        w1*w2 - x1*x2 - y1*y2 - z1*z2,
-
-        w1*x2 + x1*w2 + y1*z2 - z1*y2,
-
-        w1*y2 - x1*z2 + y1*w2 + z1*x2,
-
-        w1*z2 + x1*y2 - y1*x2 + z1*w2
-
-    ])
